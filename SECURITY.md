@@ -43,6 +43,16 @@ secrets into config literals, enable trace/debug, or publish real credential
 logs to diagnose failures. Secret scans with test values do not prove that
 arbitrary future upstream error paths can never disclose a secret.
 
+## Temporary dependency pin
+
+The build pins `go-jose/v3` to upstream commit
+[`0e502b87c7aa651155b11ae8e195ec33ce10230a`](https://github.com/go-jose/go-jose/commit/0e502b87c7aa651155b11ae8e195ec33ce10230a)
+(`v3.0.6-0.20261030183946-0e502b87c7aa`). This is the upstream RSA JWK
+denial-of-service backport for GHSA-mgcc-cww5-fp2q, pending a tagged v3 release.
+`go-jose/v4` is updated to v4.1.8. Both remain checksum-locked in `go.sum`;
+no local cryptographic patches or scanner exceptions are used. Replace the v3
+pin with a reviewed tagged release containing the fix when available.
+
 ## Client revocation
 
 CA chain verification checks validity and trust; it is not automatic CRL/OCSP
