@@ -1,0 +1,10 @@
+.test/
+*.pem
+*.key
+*.p12
+options.json
+caddy-bin
+launcher-bin
+__pycache__/
+.*results.txt
+.*vuln*.txt

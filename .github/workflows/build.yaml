@@ -1,0 +1,126 @@
+name: Build and security checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Stage C only: publish this approved version tag to GHCR'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: caddy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: |
+            caddy/build/go.sum
+            caddy/launcher/go.sum
+      - name: Module integrity and vulnerability checks
+        run: |
+          cd caddy/build
+          go mod verify
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+          cd ../launcher
+          go mod verify
+          go test ./...
+          go vet ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: Build runtime (never push in PR)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: caddy
+          platforms: linux/arm64
+          load: true
+          push: false
+          tags: caddy-ha:test
+      - name: Test binaries and actual runtime image
+        run: |
+          cid=$(docker create caddy-ha:test)
+          docker cp "$cid:/usr/bin/caddy" ./caddy-bin
+          docker cp "$cid:/usr/bin/launcher" ./launcher-bin
+          docker rm "$cid"
+          python3 -m venv .test/venv
+          .test/venv/bin/pip install -r tests/requirements.txt
+          .test/venv/bin/python tests/security.py ./caddy-bin
+          sudo python3 tests/runtime.py --image caddy-ha:test
+      - name: Scan runtime image
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
+        with:
+          image-ref: caddy-ha:test
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          scanners: vuln
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    environment: ghcr-release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify trusted release commit and version
+        id: release
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          python3 - <<'PYCODE'
+          import os,re,pathlib
+          ref=os.environ['RELEASE_REF']
+          assert re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',ref), 'Only stable version tags'
+          version=ref[1:]
+          manifest=pathlib.Path('caddy/config.yaml').read_text()
+          assert re.search(r'^version: '+re.escape(version)+r'$',manifest,re.M)
+          image='ghcr.io/'+os.environ['REPOSITORY'].lower()+'/caddy'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              print('version='+version,file=f)
+              print('image='+image,file=f)
+          PYCODE
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse overwrite of an existing release tag
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if docker manifest inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
+            echo 'Release tag already exists; do not overwrite it.'
+            exit 1
+          fi
+      - name: Publish approved ARM64 image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: caddy
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.release.outputs.image }}:${{ steps.release.outputs.version }}
+          build-args: BUILD_VERSION=${{ steps.release.outputs.version }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          sbom: true
+          provenance: mode=max

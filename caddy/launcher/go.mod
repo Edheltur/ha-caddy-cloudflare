@@ -1,0 +1,5 @@
+module example.invalid/caddy-ha-launcher
+
+go 1.27.3
+
+require golang.org/x/sys v0.37.0
