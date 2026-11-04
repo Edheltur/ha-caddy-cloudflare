@@ -1,0 +1,47 @@
+# Home Assistant app options: paste in Configuration -> Edit in YAML.
+# Replace the token, domain names and upstream addresses before starting.
+cloudflare_api_token: "YOUR_CLOUDFLARE_API_TOKEN"
+config_format: caddyfile
+caddy_config: |
+  {
+      admin off
+      persist_config off
+      https_port 8443
+      default_bind 0.0.0.0
+      auto_https disable_redirects
+      grace_period 15s
+      storage file_system {
+          root /data/caddy
+      }
+      cert_issuer acme {
+          dir https://acme-v02.api.letsencrypt.org/directory
+          dns cloudflare {env.CF_API_TOKEN}
+          disable_http_challenge
+          disable_tlsalpn_challenge
+      }
+      servers {
+          protocols h1 h2
+          strict_sni_host on
+      }
+  }
+  
+  # Replace BOTH names and upstreams. Never put the API token in this file.
+  ha.example.com {
+      tls {
+          protocols tls1.2 tls1.3
+          client_auth {
+              mode require_and_verify
+              trust_pool file {
+                  pem_file /config/client-ca.pem
+              }
+          }
+      }
+      reverse_proxy homeassistant:8123
+  }
+  
+  ma.example.com {
+      tls {
+          protocols tls1.2 tls1.3
+      }
+      reverse_proxy music-assistant:8095
+  }

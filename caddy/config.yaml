@@ -1,0 +1,30 @@
+name: Caddy Cloudflare mTLS
+version: 0.1.0
+slug: caddy
+description: Caddy reverse proxy with Cloudflare DNS-01 and per-host mTLS
+arch:
+  - aarch64
+startup: services
+boot: manual
+stage: experimental
+init: true
+timeout: 30
+ports:
+  8443/tcp: 443
+ports_description:
+  8443/tcp: HTTPS (HTTP/1.1 and HTTP/2)
+map:
+  - type: app_config
+    read_only: true
+    path: /config
+backup: cold
+options:
+  cloudflare_api_token: ""
+  config_format: caddyfile
+  caddy_config: ""
+schema:
+  cloudflare_api_token: password
+  config_format: list(caddyfile|json)
+  caddy_config: str?
+url: https://github.com/Edheltur/ha-caddy-cloudflare/tree/main/caddy
+# Until stage C, local builds are intentional: no nonexistent GHCR tag.

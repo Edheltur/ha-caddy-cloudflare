@@ -1,0 +1,6 @@
+**/*
+!Dockerfile
+!build/
+!build/**
+!launcher/
+!launcher/**
