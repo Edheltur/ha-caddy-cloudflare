@@ -21,8 +21,10 @@ backup: cold
 options:
   cloudflare_api_token: ""
   config_format: caddyfile
+  caddy_config: ""
 schema:
   cloudflare_api_token: password
   config_format: list(caddyfile|json)
+  caddy_config: str?
 url: https://github.com/Edheltur/ha-caddy-cloudflare/tree/main/caddy
 # Until stage C, local builds are intentional: no nonexistent GHCR tag.

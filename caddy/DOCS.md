@@ -35,7 +35,40 @@ means UI masking, not encryption at rest. Supervisor writes it to options;
 the launcher passes it as `CF_API_TOKEN`, never as an argument. Do not run
 `caddy environ`, `--environ` or debug/trace with production credentials.
 
-## Configuration files
+## Configuration in Home Assistant
+
+Open the app's Configuration tab, select **Edit in YAML** from the menu and
+set `caddy_config` using a YAML literal block (`|`). Paste the complete
+`examples/Caddyfile` beneath it, indented by two spaces. A complete settings
+example is in `examples/options.yaml`.
+
+```yaml
+cloudflare_api_token: "YOUR_TOKEN"
+config_format: caddyfile
+caddy_config: |
+  # Paste the complete Caddyfile here, with two-space indentation.
+```
+
+The nonempty `caddy_config` option takes precedence over configuration files.
+For JSON, choose `config_format: json` and paste the complete JSON into the same
+option. Save and restart the app to apply changes. Native option forms may show
+a single-line string input; use the YAML editor to preserve newlines.
+
+The launcher writes the content atomically as UID 65532 to
+`/data/caddy/addon-config`, mode 0600, then executes Caddy. It does not print the
+content or interpret routing. Caddy validates syntax at startup; an invalid
+inline config fails startup without falling back to an older file. The limit
+is 128 KiB of UTF-8 text. Do not put secrets in the Caddy configuration: keep
+`{env.CF_API_TOKEN}` and the separate token option. Upstream syntax errors may
+quote configuration fragments in logs. Options/configuration are included in
+backups; protect them accordingly.
+
+## Configuration files (optional fallback)
+
+If `caddy_config` is empty or omitted, the existing file-based configuration is
+used. The public client CA remains a separate `/config/client-ca.pem` file in
+either mode; never supply its private key.
+
 
 Use a trusted editor/file-management app with access to the app configuration
 folders. Place files in this app's directory (usually exposed as

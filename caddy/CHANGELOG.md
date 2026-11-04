@@ -9,3 +9,5 @@
 - ARM64 CI with dependency/image scanning; manual release publication only.
 - Security dependency override: golang.org/x/net v0.60.0 fixes GO-2026-6603,
   GO-2026-6610, GO-2026-6611, GO-2026-6612 and GO-2026-6617.
+
+- Accept complete Caddyfile/JSON through `caddy_config` in HA options; retain file fallback.

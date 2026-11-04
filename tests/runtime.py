@@ -46,14 +46,22 @@ with tempfile.TemporaryDirectory(prefix='launcher-test-') as td:
         check(TOKEN.encode() not in log and b'must-not-inherit' not in log,'runtime logs contain no test secrets')
     hashes=None
     for iteration in range(2):
+        if iteration == 1:
+            # Exercise UI options on restart; the old file must no longer be used.
+            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg)}))
+            (root/'config/caddy.json').write_text('invalid old file')
         handle,pid=start()
         try:
             for _ in range(150):
                 keys=list((root/'data/caddy').rglob('*.key'))
-                if len(keys)>=3:break
+                if len(keys)>=3 and (iteration == 0 or (root/'data/caddy/addon-config').exists()):break
                 if not image and handle.poll() is not None: break
                 time.sleep(.1)
             check(len(keys)>=3,'Caddy created CA and server private keys')
+            if iteration == 1:
+                generated=root/'data/caddy/addon-config'
+                check(json.loads(generated.read_text())==cfg,'inline configuration used instead of old file')
+                check(generated.stat().st_mode & 0o777==0o600 and generated.stat().st_uid==65532,'inline config owned by Caddy, mode 0600')
             status=Path(f'/proc/{pid}/status').read_text()
             fields=dict(line.split(':',1) for line in status.splitlines() if ':' in line)
             check(set(fields['Uid'].split())=={'65532'} and set(fields['Gid'].split())=={'65532'},'Caddy UID/GID 65532')

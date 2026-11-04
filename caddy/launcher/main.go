@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -19,6 +20,7 @@ const uid = 65532
 type options struct {
 	Token  string `json:"cloudflare_api_token"`
 	Format string `json:"config_format"`
+	Config string `json:"caddy_config"`
 }
 
 // Matches the accepted formats of caddy-dns/cloudflare v0.2.4. That module
@@ -27,7 +29,7 @@ var tokenPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_-]{35,50}|cf(?:ut|at)_[A-Z
 
 func readOptions(r io.Reader) (options, error) {
 	var o options
-	d := json.NewDecoder(io.LimitReader(r, 8193))
+	d := json.NewDecoder(io.LimitReader(r, 1024*1024+1))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&o); err != nil {
 		return options{}, errors.New("invalid options JSON")
@@ -41,6 +43,12 @@ func readOptions(r io.Reader) (options, error) {
 	}
 	if o.Format != "caddyfile" && o.Format != "json" {
 		return options{}, errors.New("invalid config format")
+	}
+	if len(o.Config) > 128*1024 || strings.ContainsRune(o.Config, 0) {
+		return options{}, errors.New("invalid Caddy configuration size or encoding")
+	}
+	if o.Config != "" && strings.TrimSpace(o.Config) == "" {
+		return options{}, errors.New("empty Caddy configuration")
 	}
 	return o, nil
 }
@@ -110,6 +118,28 @@ func childEnv(o options) []string {
 	return []string{"CF_API_TOKEN=" + o.Token, "HOME=/data/caddy", "XDG_DATA_HOME=/data/caddy", "XDG_CONFIG_HOME=/data/caddy", "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"}
 }
 
+// Called only AFTER dropping privileges. CreateTemp never follows a preexisting
+// symlink, and rename replaces the destination entry without following it.
+func writeConfig(dir, content string) (string, error) {
+	f, err := os.CreateTemp(dir, ".addon-config-*")
+	if err != nil {
+		return "", errors.New("cannot create Caddy configuration")
+	}
+	defer os.Remove(f.Name())
+	if _, err = io.WriteString(f, content); err != nil {
+		f.Close()
+		return "", errors.New("cannot write Caddy configuration")
+	}
+	if err = f.Close(); err != nil {
+		return "", errors.New("cannot close Caddy configuration")
+	}
+	path := dir + "/addon-config"
+	if err = os.Rename(f.Name(), path); err != nil {
+		return "", errors.New("cannot replace Caddy configuration")
+	}
+	return path, nil
+}
+
 func run() error {
 	if len(os.Args) != 1 {
 		return errors.New("launcher takes no arguments")
@@ -139,6 +169,13 @@ func run() error {
 	}
 	if err = dropPrivileges(); err != nil {
 		return errors.New("cannot drop privileges; refusing to start")
+	}
+	if o.Config != "" {
+		path, err := writeConfig("/data/caddy", o.Config)
+		if err != nil {
+			return err
+		}
+		args[3] = path
 	}
 	if err = syscall.Exec("/usr/bin/caddy", args, childEnv(o)); err != nil {
 		return errors.New("cannot execute Caddy")
