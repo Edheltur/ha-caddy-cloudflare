@@ -27,10 +27,11 @@ does not maintain a trimmed fork to save a few megabytes.
 
 | Path | Purpose |
 |---|---|
-| `/data/options.json` | Supervisor-managed token and config format |
+| `/data/options.json` | Supervisor-managed token, config format and optional Caddy configuration |
 | `/data/caddy` | Private ACME account, server certificates and keys |
-| `/config/Caddyfile` | User-managed Caddy configuration |
-| `/config/caddy.json` | Alternative native JSON, especially wildcard |
+| `/data/caddy/addon-config` | Configuration generated from `caddy_config` options, mode 0600 |
+| `/config/Caddyfile` | Optional file fallback when `caddy_config` is empty |
+| `/config/caddy.json` | Optional native JSON file fallback, especially wildcard |
 | `/config/client-ca.pem` | Public client CA certificate(s), never CA private keys |
 
 Only the app's own configuration directory is mapped read-only. `/data` is
@@ -44,6 +45,10 @@ See [installation and operations](caddy/DOCS.md),
 Examples are in [examples](examples). They are configuration examples, not
 safe universal defaults for arbitrary upstreams. Replace domain names,
 upstream addresses and actual Home Assistant ports before use.
+
+Enter the complete configuration in `caddy_config` using the app settings YAML
+editor; see [complete options example](examples/options.yaml). The public client
+CA remains a separate file. Empty/omitted `caddy_config` uses the file fallback.
 
 Changes require an app restart. Admin API, config persistence, HTTP redirects
 and HTTP/3 are disabled in the examples. DNS-01 requires no inbound port 80.

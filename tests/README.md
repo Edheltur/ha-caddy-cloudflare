@@ -19,7 +19,9 @@ issuance occur here. Client-side verification is disabled ONLY for ephemeral
 server fixtures; server-side client verification remains the subject of testing.
 
 Launcher tests cover malformed options/token non-disclosure, environment
-allowlisting and refusal to follow state-directory symlinks.
+allowlisting, multiline/size validation and refusal to follow state-directory
+symlinks. Inline config writes replace destination symlinks without following
+them and use mode 0600.
 
 ## Runtime / CI
 
@@ -31,7 +33,8 @@ sudo python3 tests/runtime.py --image caddy-ha:test
 
 This starts the actual image with root-owned bind mounts, inspects the actual
 Caddy process UID/GID and all capability sets, tests internal-CA key permissions,
-SIGTERM and restart persistence. Optional no-argument mode uses an empty chroot
+SIGTERM and restart persistence. The restart switches from a file to inline
+options, checks inline precedence and config ownership/mode. Optional no-argument mode uses an empty chroot
 with locally built static binaries. Neither may be run against production paths.
 These tests require real kernel privileges: uid 0 alone is not sufficient.
 
