@@ -1,8 +1,8 @@
 # Caddy Cloudflare mTLS for Home Assistant OS
 
-Experimental ARM64 Home Assistant app (add-on). Caddy v2.11.7 with
+Experimental ARM64 Home Assistant app (add-on). Caddy v2.11.9 with
 `caddy-dns/cloudflare` v0.2.4. `golang.org/x/net` is explicitly updated to
-v0.60.0 for HTTP/2 security fixes found in the original v0.59.0 graph. One HTTPS listener, per-host mutual TLS,
+v0.62.0 for HTTP/2 security fixes found in the original v0.59.0 graph. One HTTPS listener, per-host mutual TLS,
 Cloudflare DNS-01 and persistent ACME storage. No web UI, ingress, shell,
 Docker socket, host network or extra ACME service.
 

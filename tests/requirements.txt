@@ -1,2 +1,2 @@
-cryptography==46.0.3
-h2==4.3.0
+cryptography==50.0.2
+h2==4.4.1
