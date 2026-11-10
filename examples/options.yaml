@@ -2,6 +2,8 @@
 # Replace the token, domain names and upstream addresses before starting.
 cloudflare_api_token: "YOUR_CLOUDFLARE_API_TOKEN"
 config_format: caddyfile
+# Paste public CA certificate(s) here; required by the mTLS example below.
+client_ca_pem: ""
 caddy_config: |
   {
       admin off
@@ -32,7 +34,7 @@ caddy_config: |
           client_auth {
               mode require_and_verify
               trust_pool file {
-                  pem_file /config/client-ca.pem
+                  pem_file /data/caddy/client-ca.pem
               }
           }
       }

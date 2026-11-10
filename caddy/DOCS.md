@@ -37,68 +37,52 @@ the launcher passes it as `CF_API_TOKEN`, never as an argument. Do not run
 
 ## Configuration in Home Assistant
 
-Open the app's Configuration tab, select **Edit in YAML** from the menu and
-set `caddy_config` using a YAML literal block (`|`). Paste the complete
-`examples/Caddyfile` beneath it, indented by two spaces. A complete settings
-example is in `examples/options.yaml`.
+All user configuration is supplied through the app options. No external
+configuration folder is mounted. In Configuration, select **Edit in YAML**:
 
 ```yaml
 cloudflare_api_token: "YOUR_TOKEN"
 config_format: caddyfile
+client_ca_pem: |
+  -----BEGIN CERTIFICATE-----
+  PASTE_YOUR_PUBLIC_CA_CERTIFICATE_HERE
+  -----END CERTIFICATE-----
 caddy_config: |
-  # Paste the complete Caddyfile here, with two-space indentation.
+  # Paste the complete examples/Caddyfile here with two-space indentation.
 ```
 
-The nonempty `caddy_config` option takes precedence over configuration files.
-For JSON, choose `config_format: json` and paste the complete JSON into the same
-option. Save and restart the app to apply changes. Native option forms may show
-a single-line string input; use the YAML editor to preserve newlines.
+Use `examples/options.yaml` as the complete starting point. Replace the token,
+exact domain names and upstream addresses. `homeassistant:8123` is the usual HA
+listener; use the actual reachable hostname/IP and port for Music Assistant.
+`localhost` refers to this container, not another app.
 
-The launcher writes the content atomically as UID 65532 to
-`/data/caddy/addon-config`, mode 0600, then executes Caddy. It does not print the
-content or interpret routing. Caddy validates syntax at startup; an invalid
-inline config fails startup without falling back to an older file. The limit
-is 128 KiB of UTF-8 text. Do not put secrets in the Caddy configuration: keep
-`{env.CF_API_TOKEN}` and the separate token option. Upstream syntax errors may
-quote configuration fragments in logs. Options/configuration are included in
-backups; protect them accordingly.
+`caddy_config` is mandatory. Select `config_format: json` to provide native JSON
+in the same option. `client_ca_pem` accepts public CA certificates, including a
+bundle for rotation; private keys, leaf certificates and malformed input are
+rejected without logging their content. Leave it empty only when client CA
+trust is not needed (for example public HTTPS-only configuration).
 
-## Configuration files (optional fallback)
+The launcher writes `/data/caddy/addon-config` and, if provided,
+`/data/caddy/client-ca.pem` atomically as UID 65532, mode 0600. The examples use
+`/data/caddy/client-ca.pem` in their trust pool. Clearing the CA option removes
+the generated CA on restart; a configuration still requiring that file fails
+startup. No old external files or generated config are used as fallback.
+Each option has a 128 KiB content limit. Caddy validates routing/TLS syntax.
+Never put secrets directly in Caddy config: use `{env.CF_API_TOKEN}`. Syntax
+errors from Caddy can quote configuration fragments.
 
-If `caddy_config` is empty or omitted, the existing file-based configuration is
-used. The public client CA remains a separate `/config/client-ca.pem` file in
-either mode; never supply its private key.
+Save and restart after any change; existing WebSockets reconnect. Admin API is
+disabled, so `caddy reload` is not available. Supervisor stops via SIGTERM.
+Keep HA login/MFA enabled. Test client-certificate support in each browser/app.
 
-
-Use a trusted editor/file-management app with access to the app configuration
-folders. Place files in this app's directory (usually exposed as
-`/addon_configs/<repository-id>_caddy` or the equivalent app-config view in newer
-HA). Inside this container the directory is always `/config` and read-only.
-Do not confuse it with Home Assistant Core's configuration directory.
-
-Copy `examples/Caddyfile` into that directory as `Caddyfile`. Replace:
-
-- `ha.example.com` and `ma.example.com` with your exact names.
-- `homeassistant:8123` with the actual HA listener, including port.
-- `music-assistant:8095` with MA's reachable hostname/IP and port.
-
-An app's Supervisor DNS name differs from its friendly name. Use the actual
-hostname; `localhost` is this container, not Home Assistant or Music Assistant.
-Do not forward arbitrary request hosts, paths or client-provided upstream URLs.
-
-Copy the public issuing CA PEM as `client-ca.pem`. Files must be readable by
-UID 65532 (public CA/config may be 0644); the mount is read-only. Never put the
-CA private key or client private keys here. Missing/invalid config must fail
-startup; the app does not install an unsafe fallback configuration.
-
-Choose `config_format: caddyfile`. Start and inspect the app log. Restart after
-configuration/CA changes. `admin off` prevents `caddy reload`; Supervisor stop
-uses SIGTERM with a 30-second timeout, while Caddy's grace period is 15 seconds.
-Existing WebSockets may disconnect during restart and clients must reconnect.
+Migration from the earlier experimental file-based version: paste Caddyfile or
+JSON into `caddy_config`, paste the public CA into `client_ca_pem`, and replace
+old trust-pool paths with `/data/caddy/client-ca.pem`. Back up options and data
+before updating. Old `/config` files are no longer mounted or read.
 
 ## Wildcard and TLS policies
 
-Use `examples/caddy-wildcard.json` as `/config/caddy.json` and choose
+Paste `examples/caddy-wildcard.json` into `caddy_config` and choose
 `config_format: json`. Replace `*.example.com` in both certificate automation
 locations; replace exact HA/MA names in both TLS policies and HTTP routes.
 The wildcard controls certificate issuance, **not a wildcard upstream route**.
@@ -193,17 +177,17 @@ HTTP/2 connections; separate curl commands do not test coalescing.
 
 ## Backup, update and rollback
 
-Back up this app's options, data and app_config, encrypted. `backup: cold`
+Back up this app's options and data, encrypted. `backup: cold`
 requests a stopped-app backup for consistent state. A backup contains the
 Cloudflare token, ACME account key and private server TLS keys. Keep decryption
-keys outside the same machine. Confirm app_config is restored on your HA version.
+keys outside the same machine. The public CA and routing configuration are included in options.
 
 Before updating: read release notes, take a backup, retain the previous image
 version. Update through Supervisor, verify logs, HTTPS and client authentication.
 Do not delete/reinstall as an update method and do not wipe `/data/caddy`.
 
 To roll back, use the pre-upgrade app backup and its matching version. Restore
-options, app_config and data together. Only one instance should operate that
+options and data together. Only one instance should operate that
 restored state. Confirm account/certificate reuse and expiry after restart.
 If the old image is no longer available, restore requires rebuilding its exact
 source and pinned inputs; retain release images to avoid this dependency.

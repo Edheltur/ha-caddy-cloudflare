@@ -27,7 +27,7 @@ ha.example.com {
 		client_auth {
 			mode require_and_verify
 			trust_pool file {
-				pem_file /config/client-ca.pem
+				pem_file /data/caddy/client-ca.pem
 			}
 		}
 	}

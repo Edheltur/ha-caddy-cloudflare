@@ -125,8 +125,8 @@ with tempfile.TemporaryDirectory(prefix='caddy-security-') as directory:
     backend=http.server.ThreadingHTTPServer(('127.0.0.1',0),Backend);threading.Thread(target=backend.serve_forever,daemon=True).start()
     upstream='127.0.0.1:'+str(backend.server_port)
     def replace(value):
-        return json.loads(json.dumps(value).replace('/config/client-ca.pem',str(P/'client-ca.pem')).replace('/data/caddy',str(P/'state')).replace('homeassistant:8123',upstream).replace('music-assistant:8095',upstream))
-    cf=(ROOT/'examples/Caddyfile').read_text().replace('/config/client-ca.pem',str(P/'client-ca.pem')).replace('/data/caddy',str(P/'state'))
+        return json.loads(json.dumps(value).replace('/data/caddy/client-ca.pem',str(P/'client-ca.pem')).replace('/data/caddy',str(P/'state')).replace('homeassistant:8123',upstream).replace('music-assistant:8095',upstream))
+    cf=(ROOT/'examples/Caddyfile').read_text().replace('/data/caddy/client-ca.pem',str(P/'client-ca.pem')).replace('/data/caddy',str(P/'state'))
     f=P/'Caddyfile';f.write_text(cf)
     subprocess.run([BIN,'validate','--config',str(f),'--adapter','caddyfile'],env=ENV,check=True,capture_output=True)
     adapted=json.loads(subprocess.check_output([BIN,'adapt','--config',str(f),'--adapter','caddyfile'],env=ENV))

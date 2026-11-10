@@ -33,8 +33,8 @@ sudo python3 tests/runtime.py --image caddy-ha:test
 
 This starts the actual image with root-owned bind mounts, inspects the actual
 Caddy process UID/GID and all capability sets, tests internal-CA key permissions,
-SIGTERM and restart persistence. The restart switches from a file to inline
-options, checks inline precedence and config ownership/mode. Optional no-argument mode uses an empty chroot
+SIGTERM and restart persistence. The restart supplies a public CA through options and checks generated
+configuration and CA ownership/mode. Optional no-argument mode uses an empty chroot
 with locally built static binaries. Neither may be run against production paths.
 These tests require real kernel privileges: uid 0 alone is not sufficient.
 
@@ -66,13 +66,13 @@ renewal coverage: verify renewal in a long-running staging acceptance deployment
 ## Required HA OS acceptance before public release
 
 - Record HA OS, Supervisor and Core versions; install on RPi4 aarch64.
-- Keep Protection mode/AppArmor enabled; verify app-config mapping and permissions.
+- Keep Protection mode/AppArmor enabled; verify options-based config and CA permissions.
 - Verify first start with root-owned /data, no extra permissions, only TCP/443.
 - Verify HA and MA actual upstream addresses/ports, public DNS and external mTLS.
 - Verify companion-app client certificates and WebSocket reconnect after restart.
 - Issue and renew a staging certificate with the real DNS provider.
 - Update and roll back; verify ACME identity and certificates are retained.
-- Restore an encrypted cold backup, including options and app_config, on clean HA.
+- Restore an encrypted cold backup, including options, on clean HA.
 - Verify no credentials in logs, backup sharing, source, image or build artifacts.
 - After stage C, anonymously pull the exact public GHCR version from a clean client.
 

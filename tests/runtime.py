@@ -17,18 +17,17 @@ def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 
 with tempfile.TemporaryDirectory(prefix='launcher-test-') as td:
     root=Path(td);root.chmod(0o755)
-    for d in ('data','config','usr/bin','dev'): (root/d).mkdir(parents=True,exist_ok=True)
-    (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json'}))
+    for d in ('data','usr/bin','dev'): (root/d).mkdir(parents=True,exist_ok=True)
     # Internal CA exercises real Caddy persistent private-key storage, offline.
     cfg={'admin':{'disabled':True,'config':{'persist':False}},'storage':{'module':'file_system','root':'/data/caddy'},'apps':{'pki':{'certificate_authorities':{'local':{'install_trust':False}}},'tls':{'certificates':{'automate':['localhost']},'automation':{'policies':[{'subjects':['localhost'],'issuers':[{'module':'internal'}]}]}},'http':{'grace_period':'1s','servers':{'test':{'listen':['0.0.0.0:19443'],'protocols':['h1','h2'],'automatic_https':{'disable':True},'tls_connection_policies':[{'match':{'sni':['localhost']}}],'routes':[{'handle':[{'handler':'static_response','body':'ok'}]}]}}}}}
-    (root/'config/caddy.json').write_text(json.dumps(cfg))
+    (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg)}))
     if not image:
         shutil.copyfile(ROOT/'launcher-bin',root/'usr/bin/launcher');shutil.copyfile(ROOT/'caddy-bin',root/'usr/bin/caddy')
         for f in (root/'usr/bin').iterdir(): f.chmod(0o755)
     def start():
         if image:
             name='caddy-security-'+str(os.getpid())
-            subprocess.run(['docker','run','-d','--name',name,'--cap-drop=NET_RAW','--security-opt=no-new-privileges','-v',str(root/'data')+':/data','-v',str(root/'config')+':/config:ro','-e','SUPERVISOR_TOKEN=must-not-inherit','-e','HASSIO_TOKEN=must-not-inherit',image],check=True,stdout=subprocess.DEVNULL)
+            subprocess.run(['docker','run','-d','--name',name,'--cap-drop=NET_RAW','--security-opt=no-new-privileges','-v',str(root/'data')+':/data','-e','SUPERVISOR_TOKEN=must-not-inherit','-e','HASSIO_TOKEN=must-not-inherit',image],check=True,stdout=subprocess.DEVNULL)
             pid=int(subprocess.check_output(['docker','inspect','-f','{{.State.Pid}}',name]))
             return name,pid
         p=subprocess.Popen(['chroot',str(root),'/usr/bin/launcher'],env={**os.environ,'SUPERVISOR_TOKEN':'must-not-inherit','HASSIO_TOKEN':'must-not-inherit'},stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
@@ -45,11 +44,17 @@ with tempfile.TemporaryDirectory(prefix='launcher-test-') as td:
         check(code==0,'launcher exec and SIGTERM exit cleanly')
         check(TOKEN.encode() not in log and b'must-not-inherit' not in log,'runtime logs contain no test secrets')
     hashes=None
-    for iteration in range(2):
+    for iteration in range(3):
         if iteration == 1:
-            # Exercise UI options on restart; the old file must no longer be used.
-            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg)}))
-            (root/'config/caddy.json').write_text('invalid old file')
+            # Supply the generated public root as a client CA via options on restart.
+            cfg['apps']['http']['servers']['test']['tls_connection_policies'][0]['client_authentication']={'mode':'require_and_verify','ca':{'provider':'file','pem_files':['/data/caddy/client-ca.pem']}}
+            ca=(root/'data/caddy/pki/authorities/local/root.crt').read_text()
+            (root/'data/caddy/addon-config').unlink()
+            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg),'client_ca_pem':ca}))
+        if iteration == 2:
+            del cfg['apps']['http']['servers']['test']['tls_connection_policies'][0]['client_authentication']
+            (root/'data/caddy/addon-config').unlink()
+            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg),'client_ca_pem':''}))
         handle,pid=start()
         try:
             for _ in range(150):
@@ -60,8 +65,13 @@ with tempfile.TemporaryDirectory(prefix='launcher-test-') as td:
             check(len(keys)>=3,'Caddy created CA and server private keys')
             if iteration == 1:
                 generated=root/'data/caddy/addon-config'
-                check(json.loads(generated.read_text())==cfg,'inline configuration used instead of old file')
+                check(json.loads(generated.read_text())==cfg,'inline configuration used')
                 check(generated.stat().st_mode & 0o777==0o600 and generated.stat().st_uid==65532,'inline config owned by Caddy, mode 0600')
+            if iteration == 1:
+                cafile=root/'data/caddy/client-ca.pem'
+                check(cafile.read_text()==ca and cafile.stat().st_mode & 0o777==0o600 and cafile.stat().st_uid==65532,'CA from options has correct contents, owner and mode')
+            if iteration == 2:
+                check(not (root/'data/caddy/client-ca.pem').exists(),'clearing CA option removes stale trust file')
             status=Path(f'/proc/{pid}/status').read_text()
             fields=dict(line.split(':',1) for line in status.splitlines() if ':' in line)
             check(set(fields['Uid'].split())=={'65532'} and set(fields['Gid'].split())=={'65532'},'Caddy UID/GID 65532')

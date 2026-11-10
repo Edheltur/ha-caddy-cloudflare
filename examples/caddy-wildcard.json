@@ -38,7 +38,7 @@
                 "ca": {
                   "provider": "file",
                   "pem_files": [
-                    "/config/client-ca.pem"
+                    "/data/caddy/client-ca.pem"
                   ]
                 }
               }

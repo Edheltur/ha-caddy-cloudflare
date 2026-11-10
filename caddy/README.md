@@ -1,9 +1,8 @@
 # Caddy Cloudflare mTLS
 
-ARM64 HTTPS reverse proxy for Home Assistant OS. Cloudflare DNS-01, per-host
-client certificate verification, no administration panel. Experimental.
+Experimental ARM64 HTTPS reverse proxy for Home Assistant OS with Cloudflare
+DNS-01 and per-host mTLS. Read [DOCS.md](DOCS.md) before starting.
 
-Read [DOCS.md](DOCS.md) before starting. Enter the Caddy configuration in the app options (YAML editor); file-based
-configuration remains available as a fallback. Supply the public client CA
-through this app's configuration directory. The Cloudflare token is
-entered in the app configuration UI, never in the Caddyfile.
+Enter `cloudflare_api_token`, `caddy_config` and public `client_ca_pem` in the
+app settings YAML editor. Choose Caddyfile or JSON with `config_format`.
+No external configuration files or CA private keys are needed or accepted.

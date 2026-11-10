@@ -30,13 +30,11 @@ does not maintain a trimmed fork to save a few megabytes.
 | `/data/options.json` | Supervisor-managed token, config format and optional Caddy configuration |
 | `/data/caddy` | Private ACME account, server certificates and keys |
 | `/data/caddy/addon-config` | Configuration generated from `caddy_config` options, mode 0600 |
-| `/config/Caddyfile` | Optional file fallback when `caddy_config` is empty |
-| `/config/caddy.json` | Optional native JSON file fallback, especially wildcard |
-| `/config/client-ca.pem` | Public client CA certificate(s), never CA private keys |
+| `/data/caddy/client-ca.pem` | Public client CA generated from options |
 
-Only the app's own configuration directory is mapped read-only. `/data` is
-provided by Supervisor. Do not rename the slug/repository identity or clear
-storage during upgrades. Backups contain credentials and private keys.
+Supervisor provides `/data`; no external configuration directory is mounted.
+Do not rename the slug/repository identity or clear storage during upgrades.
+Backups contain credentials and private keys as well as configuration options.
 
 ## Configuration and operation
 
@@ -47,8 +45,8 @@ safe universal defaults for arbitrary upstreams. Replace domain names,
 upstream addresses and actual Home Assistant ports before use.
 
 Enter the complete configuration in `caddy_config` using the app settings YAML
-editor; see [complete options example](examples/options.yaml). The public client
-CA remains a separate file. Empty/omitted `caddy_config` uses the file fallback.
+editor; see [complete options example](examples/options.yaml). Supply the public client
+CA in `client_ca_pem`. Configuration is mandatory; no file fallback exists.
 
 Changes require an app restart. Admin API, config persistence, HTTP redirects
 and HTTP/3 are disabled in the examples. DNS-01 requires no inbound port 80.

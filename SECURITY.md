@@ -57,7 +57,7 @@ pin with a reviewed tagged release containing the fix when available.
 
 CA chain verification checks validity and trust; it is not automatic CRL/OCSP
 revocation enforcement. The baseline response to a stolen client key is removing
-its issuing CA from the trust file, restarting (closing existing connections),
+its issuing CA from the client_ca_pem option, restarting (closing existing connections),
 and reissuing affected clients under a new CA. Use short-lived client certificates.
 A leaf allowlist could support individual client removal, but is not part of the
 validated baseline. Do not assume publishing a CRL is sufficient.

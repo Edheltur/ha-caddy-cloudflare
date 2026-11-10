@@ -14,3 +14,5 @@
 
 - Refresh go-jose/v4 to 4.1.9, x/net to 0.62.0, x/crypto to 0.58.0 and x/sys to 0.50.0; retain upstream v3 security backport.
 - Refresh test-only cryptography to 50.0.2 and h2 to 4.4.1.
+
+- Breaking (experimental): config and public client CA now come exclusively from app options; remove external config mount and file fallback.

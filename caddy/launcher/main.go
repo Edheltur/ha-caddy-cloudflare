@@ -2,7 +2,10 @@
 package main
 
 import (
+	"bytes"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -18,9 +21,10 @@ import (
 const uid = 65532
 
 type options struct {
-	Token  string `json:"cloudflare_api_token"`
-	Format string `json:"config_format"`
-	Config string `json:"caddy_config"`
+	Token    string `json:"cloudflare_api_token"`
+	Format   string `json:"config_format"`
+	Config   string `json:"caddy_config"`
+	ClientCA string `json:"client_ca_pem"`
 }
 
 // Matches the accepted formats of caddy-dns/cloudflare v0.2.4. That module
@@ -47,10 +51,42 @@ func readOptions(r io.Reader) (options, error) {
 	if len(o.Config) > 128*1024 || strings.ContainsRune(o.Config, 0) {
 		return options{}, errors.New("invalid Caddy configuration size or encoding")
 	}
-	if o.Config != "" && strings.TrimSpace(o.Config) == "" {
+	if strings.TrimSpace(o.Config) == "" {
 		return options{}, errors.New("empty Caddy configuration")
 	}
+	if o.ClientCA != "" {
+		if err := validateCA(o.ClientCA); err != nil {
+			return options{}, err
+		}
+	}
 	return o, nil
+}
+
+// Accept public CA certificates only, including bundles for CA rotation.
+func validateCA(value string) error {
+	invalid := errors.New("client_ca_pem must contain only public CA certificates (max 128 KiB)")
+	if len(value) > 128*1024 {
+		return invalid
+	}
+	rest := bytes.TrimSpace([]byte(value))
+	if len(rest) == 0 {
+		return invalid
+	}
+	for len(rest) > 0 {
+		if !bytes.HasPrefix(rest, []byte("-----BEGIN CERTIFICATE-----")) {
+			return invalid
+		}
+		block, tail := pem.Decode(rest)
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			return invalid
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil || !cert.BasicConstraintsValid || !cert.IsCA {
+			return invalid
+		}
+		rest = bytes.TrimSpace(tail)
+	}
+	return nil
 }
 
 // Only touch the dedicated state directory itself, never recursively chown
@@ -121,6 +157,10 @@ func childEnv(o options) []string {
 // Called only AFTER dropping privileges. CreateTemp never follows a preexisting
 // symlink, and rename replaces the destination entry without following it.
 func writeConfig(dir, content string) (string, error) {
+	return writePrivateFile(dir, "addon-config", content)
+}
+
+func writePrivateFile(dir, name, content string) (string, error) {
 	f, err := os.CreateTemp(dir, ".addon-config-*")
 	if err != nil {
 		return "", errors.New("cannot create Caddy configuration")
@@ -133,7 +173,7 @@ func writeConfig(dir, content string) (string, error) {
 	if err = f.Close(); err != nil {
 		return "", errors.New("cannot close Caddy configuration")
 	}
-	path := dir + "/addon-config"
+	path := dir + "/" + name
 	if err = os.Rename(f.Name(), path); err != nil {
 		return "", errors.New("cannot replace Caddy configuration")
 	}
@@ -160,15 +200,24 @@ func run() error {
 	if err = prepareStorage("/data"); err != nil {
 		return err
 	}
-	args := []string{"caddy", "run", "--config", "/config/Caddyfile", "--adapter", "caddyfile"}
+	args := []string{"caddy", "run", "--config", "/data/caddy/addon-config", "--adapter", "caddyfile"}
 	if o.Format == "json" {
-		args = []string{"caddy", "run", "--config", "/config/caddy.json"}
+		args = []string{"caddy", "run", "--config", "/data/caddy/addon-config"}
 	}
 	if err = os.Chdir("/data/caddy"); err != nil {
 		return errors.New("cannot enter state directory")
 	}
 	if err = dropPrivileges(); err != nil {
 		return errors.New("cannot drop privileges; refusing to start")
+	}
+	if o.ClientCA != "" {
+		if _, err := writePrivateFile("/data/caddy", "client-ca.pem", o.ClientCA); err != nil {
+			return errors.New("cannot write client CA")
+		}
+	} else {
+		if err := os.Remove("/data/caddy/client-ca.pem"); err != nil && !os.IsNotExist(err) {
+			return errors.New("cannot remove stale client CA")
+		}
 	}
 	if o.Config != "" {
 		path, err := writeConfig("/data/caddy", o.Config)

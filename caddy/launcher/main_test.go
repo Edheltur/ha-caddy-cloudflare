@@ -1,7 +1,12 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"os"
 	"strings"
 	"testing"
@@ -9,7 +14,7 @@ import (
 
 func TestOptions(t *testing.T) {
 	for _, token := range []string{strings.Repeat("a", 40), "cfut_" + strings.Repeat("x", 64), "cfat_" + strings.Repeat("z", 32)} {
-		if _, err := readOptions(strings.NewReader(`{"cloudflare_api_token":"` + token + `","config_format":"json"}`)); err != nil {
+		if _, err := readOptions(strings.NewReader(`{"cloudflare_api_token":"` + token + `","config_format":"json","caddy_config":"{}"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -57,7 +62,7 @@ func TestInlineOptions(t *testing.T) {
 	if err != nil || o.Config != content {
 		t.Fatal("multiline configuration not preserved", err)
 	}
-	for _, content := range []string{" \n", strings.Repeat("x", 128*1024+1), "bad\x00config"} {
+	for _, content := range []string{"", " \n", strings.Repeat("x", 128*1024+1), "bad\x00config"} {
 		raw, _ := json.Marshal(options{Token: strings.Repeat("a", 40), Format: "json", Config: content})
 		if _, err := readOptions(strings.NewReader(string(raw))); err == nil {
 			t.Fatal("accepted invalid config")
@@ -96,5 +101,36 @@ func TestWriteConfigReplacesSymlink(t *testing.T) {
 	b, _ = os.ReadFile(path)
 	if string(b) != "updated" {
 		t.Fatal("stale configuration")
+	}
+}
+
+func TestClientCA(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert := &x509.Certificate{SerialNumber: big.NewInt(1), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	der, err := x509.CreateCertificate(rand.Reader, cert, cert, pub, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	for _, value := range []string{good, good + good} {
+		if err := validateCA(value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cert.IsCA = false
+	der, err = x509.CreateCertificate(rand.Reader, cert, cert, pub, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	for _, value := range []string{" ", good + "secret", leaf, "-----BEGIN PRIVATE KEY-----\nSECRET\n-----END PRIVATE KEY-----", strings.Repeat("x", 128*1024+1)} {
+		if err := validateCA(value); err == nil {
+			t.Fatal("accepted invalid CA")
+		} else if strings.Contains(err.Error(), "SECRET") {
+			t.Fatal("leaked content")
+		}
 	}
 }
