@@ -6,9 +6,11 @@ v0.62.0 for HTTP/2 security fixes found in the original v0.59.0 graph. One HTTPS
 Cloudflare DNS-01 and persistent ACME storage. No web UI, ingress, shell,
 Docker socket, host network or extra ACME service.
 
-**Status:** implementation candidate, not a published release. Repository: [Edheltur/ha-caddy-cloudflare](https://github.com/Edheltur/ha-caddy-cloudflare).
-The GHCR image reference will be enabled only after an approved release.
-No claim of installation/backup compatibility until HA OS acceptance passes.
+Install through the Home Assistant app store using this repository URL:
+https://github.com/Edheltur/ha-caddy-cloudflare.
+Published versioned ARM64 images are pulled from GHCR; installation does not
+require local builds, Samba or FTP. See [operations](caddy/DOCS.md).
+The app remains experimental until the [HA OS acceptance checks](tests/README.md) pass.
 
 ## Architecture
 
@@ -27,7 +29,7 @@ does not maintain a trimmed fork to save a few megabytes.
 
 | Path | Purpose |
 |---|---|
-| `/data/options.json` | Supervisor-managed token, config format and optional Caddy configuration |
+| `/data/options.json` | Supervisor-managed token, required native JSON and public client CA |
 | `/data/caddy` | Private ACME account, server certificates and keys |
 | `/data/caddy/addon-config` | Configuration generated from `caddy_config` options, mode 0600 |
 | `/data/caddy/client-ca.pem` | Public client CA generated from options |
@@ -49,36 +51,16 @@ Changes require an app restart. Admin API, config persistence, HTTP redirects
 and HTTP/3 are disabled in the default configuration. DNS-01 requires no inbound port 80.
 Do not enable Cloudflare's HTTP proxy in front of direct client mTLS.
 
-## Build
-
-Build on ARM64 with Docker BuildKit:
-
-```sh
-docker build --platform linux/arm64 -t caddy-ha:local caddy
-```
-
-Base image digest, Go module graph and action SHAs are fixed. Updating them
-requires a reviewed PR. `go.mod/go.sum` plus checksum verification lock the
-module inputs; no executable code is downloaded at container startup.
-This is input reproducibility, not a claim of independently verified
-bit-for-bit image reproducibility.
-
-Only ARM64 images are built. Offline binary tests can also run on the
-developer's native architecture without publishing another image variant.
+Build and test instructions are in [the developer guide](tests/README.md).
 
 ## Release policy
 
-The CI has no automatic publish on push or tag creation. Stage C requires a
-manual workflow dispatch **on an approved version tag**, `publish=true`, and
-the `ghcr-release` environment. Configure required reviewers for that
-environment and protect `main`, version tags and workflow changes before use.
+See [the release checklist](RELEASING.md). Publication is manual and restricted
+to approved version tags from main. The exact release image is tested and
+scanned by digest before receiving its version tag. SBOM and provenance are
+retained; Supervisor does not verify these as an installation admission policy.
 
-Version tags must identify commits reachable from `main` and agree with the
-manifest. Do not retag releases. The public GHCR package and anonymous pull
-must be checked explicitly. Supervisor consumes version tags; it does not
-verify our SBOM/provenance as an installation admission policy.
-
-Security update policy: weekly scheduled scans and update PRs; promptly review
-relevant critical advisories, test patches, then approve a release. No automatic
-merge or deployment. Retain the previous image and an encrypted pre-upgrade
-backup for recovery.
+Security update policy: weekly scheduled scans and reviewed update PRs.
+Review relevant critical advisories promptly, test patches, then release.
+No automatic merge or deployment. Retain the previous image and an encrypted
+pre-upgrade backup for recovery.

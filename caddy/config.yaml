@@ -140,4 +140,4 @@ schema:
   caddy_config: str(1,131072)
   client_ca_pem: str?
 url: https://github.com/Edheltur/ha-caddy-cloudflare/tree/main/caddy
-# Until stage C, local builds are intentional: no nonexistent GHCR tag.
+image: ghcr.io/edheltur/ha-caddy-cloudflare/caddy

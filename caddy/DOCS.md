@@ -2,17 +2,14 @@
 
 ## Before installation
 
-This implementation is not released yet. The repository is
-https://github.com/Edheltur/ha-caddy-cloudflare. The public image reference will be enabled
-only after the approved GHCR release.
-
-After release: Settings -> Apps (Add-ons on older UI) -> App store -> menu ->
+Settings -> Apps (Add-ons on older UI) -> App store -> menu ->
 Repositories -> add the published GitHub repository URL. Install Caddy Cloudflare
 mTLS on **64-bit HA OS**; Raspberry Pi 4 hardware alone does not establish that
 the OS is aarch64. Leave Protection mode enabled. Do not enable automatic updates
 until you have an encrypted backup and a verified restore procedure.
 
-The host must have TCP/443 available. Publish/forward only TCP/443 to HA OS.
+The host must have TCP/443 available by default. Change the host port in the
+app Network settings if needed; leave the JSON listener at 0.0.0.0:8443. Publish/forward only TCP/443 to HA OS.
 Do not expose upstream ports, UDP/443 or TCP/80. Outbound DNS, HTTPS to Cloudflare
 and Let's Encrypt, and access to configured upstreams are required.
 

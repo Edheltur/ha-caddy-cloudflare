@@ -1,5 +1,18 @@
 # Test levels and release gates
 
+## Developer builds
+
+Build the runtime on ARM64 with Docker BuildKit:
+
+```sh
+docker build --platform linux/arm64 -t caddy-ha:test caddy
+```
+
+This is a developer workflow. Install in HA through the repository and GHCR.
+Base image digest, Go module graph and action SHAs are fixed. This locks build
+inputs; it is not a claim of bit-for-bit image reproducibility. Only ARM64
+images are published. Native binary tests can run on other architectures.
+
 ## Offline developer tests
 
 Build Caddy and run the integration tests from the repository root:
@@ -70,7 +83,7 @@ requires a long-running staging test.
 - Update and roll back; verify ACME identity and certificates are retained.
 - Restore an encrypted cold backup, including options, on clean HA.
 - Verify no credentials in logs, backup sharing, source, image or build artifacts.
-- After stage C, anonymously pull the exact public GHCR version from a clean client.
+- After publication, anonymously pull the exact public GHCR version from a clean client.
 
 No local Docker test proves Supervisor-specific acceptance. Keep the project
 experimental and do not declare these gates passed without recorded evidence.
