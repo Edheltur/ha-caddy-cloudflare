@@ -4,3 +4,4 @@
 !build/**
 !launcher/
 !launcher/**
+build/integration/

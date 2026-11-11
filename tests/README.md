@@ -2,67 +2,61 @@
 
 ## Offline developer tests
 
-Build the two binaries using the pinned Go toolchain and `CGO_ENABLED=0`, then:
+Build Caddy and run the integration tests from the repository root:
 
 ```sh
-python3 -m venv .test/venv
-.test/venv/bin/pip install -r tests/requirements.txt
-.test/venv/bin/python tests/security.py ./caddy-bin
+CGO_ENABLED=0 go -C caddy/build build -mod=readonly -buildvcs=false -trimpath -o ../../caddy-bin .
+CADDY_TEST_BINARY="$PWD/caddy-bin" go -C caddy/build test -mod=readonly -count=1 -v ./integration
 ```
 
-`security.py` validates the JSON default from `caddy/config.yaml`, substitutes
-locally generated server/client certificates and loopback upstreams, then runs
-TLS 1.2/1.3, missing/foreign/expired/valid clients, public HTTPS, missing/unknown
-SNI, Host mismatch, actual HTTP/2 connection reuse, WebSocket frame forwarding,
-TLS 1.3-only and SIGTERM/log checks. A test-only public hostname shares a
-wildcard certificate with HA for the cross-host HTTP/2 checks. No production secrets, DNS writes or ACME
-issuance occur here. Client-side verification is disabled ONLY for ephemeral
-server fixtures; server-side client verification remains the subject of testing.
+`TestTLS` validates the default JSON from `caddy/config.yaml` and runs it with
+ephemeral server/client certificates and a loopback upstream. It checks TLS
+1.2/1.3, missing/foreign/expired/valid client certificates, unknown and missing
+SNI, Host mismatch, HTTP/2 connection reuse and WebSocket forwarding. A
+test-only public hostname shares a wildcard certificate with HA for the
+cross-host checks. `TestInternalStorage` checks key reuse across SIGTERM and
+restart. Offline tests do not write DNS records or use production credentials.
 
-Launcher tests cover malformed options/token non-disclosure, environment
-allowlisting, multiline/size validation and refusal to follow state-directory
-symlinks. Inline config writes replace destination symlinks without following
-them and use mode 0600.
+Launcher unit tests run in the existing launcher module:
+
+```sh
+go -C caddy/launcher test -mod=readonly ./...
+```
 
 ## Runtime / CI
 
-On a root-capable disposable Linux host:
+On a disposable Linux host with Docker, build the test binary as your user,
+then run the container test as root:
 
 ```sh
-sudo python3 tests/runtime.py --image caddy-ha:test
+mkdir -p .test
+docker build -t caddy-ha:test caddy
+go -C caddy/build test -mod=readonly -c -o "$PWD/.test/integration.test" ./integration
+(cd caddy/build/integration && sudo env CADDY_TEST_IMAGE=caddy-ha:test ../../../.test/integration.test -test.v -test.run '^TestRuntime$')
 ```
 
-This starts the actual image with root-owned bind mounts, inspects the actual
-Caddy process UID/GID and all capability sets, tests internal-CA key permissions,
-SIGTERM and restart persistence. The restart supplies a public CA through options and checks generated
-configuration and CA ownership/mode. Optional no-argument mode uses an empty chroot
-with locally built static binaries. Neither may be run against production paths.
-These tests require real kernel privileges: uid 0 alone is not sufficient.
-
-CI uses a native ARM64 runner, no production credentials, Go vulnerability scans
-and Trivy. New findings fail the job; evaluate and fix them rather than silently
-adding an ignore. BuildKit publishes SBOM/provenance only in the gated release job.
+The test binds HTTPS to an ephemeral loopback port, inspects the running
+process, and checks the mounted state and generated CA. It also verifies
+mTLS, stale CA removal, key reuse, safe token rejection and SIGTERM.
+CI runs on ARM64 with Go vulnerability checks and Trivy. BuildKit publishes
+SBOM and provenance in the gated release job.
 
 ## Real Cloudflare integration (explicit opt-in)
 
-Use a dedicated disposable test zone and scoped token. Never use production
-credentials on a public PR. `acme-staging.yaml` runs only by manual dispatch
-from main, uses the protected `acme-staging` environment, and injects secrets
-only into the final test step. Set environment secret `CF_API_TOKEN` and variable
-`ACME_TEST_DOMAIN` (an ordinary exact hostname in the test zone).
+Use a disposable test zone and a scoped token. The manual workflow runs
+from main with the protected `acme-staging` environment. Set its secret
+`CF_API_TOKEN` and variable `ACME_TEST_DOMAIN` to an exact test hostname.
 
-Locally, install the test requirements and set those environment variables securely, then run:
+For a local run, set those variables securely and use the binary built above:
 
 ```sh
-ACME_ALLOW_DNS_WRITE=yes .test/venv/bin/python tests/acme_staging.py ./caddy-bin
+ACME_ALLOW_DNS_WRITE=yes CADDY_TEST_BINARY="$PWD/caddy-bin" go -C caddy/build test -mod=readonly -count=1 -v ./integration -run '^TestACMEStaging$'
 ```
 
-The script uses Let's Encrypt staging, performs real DNS-01 issuance, restarts
-and compares ACME account/server keys. Staging server certificates are not
-publicly trusted; validation is deliberately disabled only in this test.
-Do not upload logs or temporary private material. Confirm ACME TXT cleanup in
-the zone after both successful and interrupted tests. This test does not claim
-renewal coverage: verify renewal in a long-running staging acceptance deployment.
+The test checks staging issuance and certificate/account key reuse after
+restart. It verifies the certificate hostname and keeps Caddy logs private.
+Check ACME TXT cleanup after successful and interrupted runs. Renewal still
+requires a long-running staging test.
 
 ## Required HA OS acceptance before public release
 

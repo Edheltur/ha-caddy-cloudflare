@@ -18,7 +18,7 @@ clears inherited environment and drops capabilities. Supervisor's Docker init
 handles the container lifecycle (`init: true`); there is no S6.
 
 The scratch runtime contains Caddy, the launcher and a public CA bundle.
-Build tools, test Python packages and scanners are not runtime dependencies.
+Build tools, Go integration tests and scanners are not runtime dependencies.
 The standard Caddy modules are compiled; optional services are not enabled.
 Caddy's standard module set has a substantial dependency graph: this project
 does not maintain a trimmed fork to save a few megabytes.

@@ -20,14 +20,14 @@ jobs:
         working-directory: caddy/build
         env:
           CGO_ENABLED: '0'
-        run: go build -mod=readonly -buildvcs=false -trimpath -o ../../caddy-bin .
-      - name: Install test dependencies
         run: |
-          python3 -m venv .test/venv
-          .test/venv/bin/pip install -r tests/requirements.txt
+          go build -mod=readonly -buildvcs=false -trimpath -o ../../caddy-bin .
+          go test -mod=readonly -c -o ../../acme-staging.test ./integration
       - name: Issue staging certificate and verify restart persistence
+        working-directory: caddy/build/integration
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           ACME_TEST_DOMAIN: ${{ vars.ACME_TEST_DOMAIN }}
+          CADDY_TEST_BINARY: ${{ github.workspace }}/caddy-bin
           ACME_ALLOW_DNS_WRITE: 'yes'
-        run: .test/venv/bin/python tests/acme_staging.py ./caddy-bin
+        run: ../../../acme-staging.test -test.v -test.run '^TestACMEStaging$'
