@@ -30,14 +30,14 @@ stronger separation, delegate ACME challenges to a dedicated DNS zone and
 configure Caddy's supported challenge delegation; test it before deployment.
 Ensure token expiry will not silently break certificate renewal.
 
-Enter the token in `cloudflare_api_token` in the app configuration. `password`
-means UI masking, not encryption at rest. Supervisor writes it to options;
+Enter the token in `cloudflare_api_token` in the app configuration. It is visible
+in the YAML editor and stored in Supervisor options;
 the launcher passes it as `CF_API_TOKEN`, never as an argument. Do not run
 `caddy environ`, `--environ` or debug/trace with production credentials.
 
 ## Configuration in Home Assistant
 
-Open the app's **Configuration → Edit in YAML**. The default JSON in
+Open the app's **Configuration** tab. Options are edited only in YAML. The default JSON in
 `caddy_config` sets up one HTTPS host with required mTLS and a server
 certificate for that exact name.
 
@@ -51,12 +51,14 @@ certificate for that exact name.
 
 ### Multiline editing
 
-HA currently renders app string options as single-line inputs. The app schema
-cannot request a textarea or JSON editor. `text.multiline` selectors used by
-Core integrations are not supported here. Do not switch a multiline configuration
-to the form editor and save it if you want to retain its formatting.
+The app uses `schema: false` to show only the YAML editor. Supervisor does not
+validate option types or required values when saving. The launcher validates
+options, JSON syntax, CA certificates and size limits when starting; Caddy
+validates its configuration on load. Invalid settings can be saved but will
+prevent startup. The API token is visible in YAML: do not share screenshots or
+copy the options into public logs/issues.
 
-Use **Configuration → menu → Edit in YAML**. Keep `caddy_config: |` and
+Keep `caddy_config: |` and
 `client_ca_pem: |` on their own lines, with every content line indented at least
 two spaces. `|-` also preserves line breaks, removing only the final newline.
 `>` and `>-` fold some line breaks into spaces. The UI may choose its own YAML
@@ -64,7 +66,7 @@ style when reserializing options; the add-on cannot control that presentation.
 Changing `>-` to `|` does not pretty-print JSON that has already become one line.
 Whitespace outside JSON strings does not change the configuration's meaning.
 
-CA PEM may be pasted into the ordinary field as well. The launcher accepts
+The launcher accepts
 normal PEM, CRLF, folded spaces, or removed line breaks and writes canonical
 PEM after validating every certificate. The certificate bytes are unchanged.
 Malformed blocks, extra text, PEM headers and private keys are rejected, even

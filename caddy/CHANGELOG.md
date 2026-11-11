@@ -4,7 +4,8 @@
 
 - Normalize client CA PEM pasted into HA single-line fields or folded YAML; preserve certificate bytes.
 - Reject malformed certificate blocks instead of skipping to a later valid block.
-- Add English/Russian option labels and editing guidance; native multiline form fields are not supported by HA.
+- Use only the YAML options editor; startup validation remains in the launcher.
+- Add English/Russian network descriptions and YAML editing guidance.
 - Document YAML formatting and using a different external HTTPS port.
 
 ## 0.1.0

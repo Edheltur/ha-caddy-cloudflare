@@ -7,7 +7,7 @@ Enter `cloudflare_api_token`, `caddy_config` and public `client_ca_pem` in the
 app settings YAML editor. Edit the prefilled native JSON in `caddy_config`.
 No external configuration files or CA private keys are needed or accepted.
 
-HA uses single-line fields in the form view. For readable JSON, use
-**Configuration → menu → Edit in YAML** with `caddy_config: |` and indent
-its content. Client CA PEM also accepts folded or removed line breaks.
-See DOCS.md for the editor limitations and external port mapping.
+Configuration uses only the YAML editor. Keep `caddy_config: |` and indent
+its content. Validation runs on startup; Supervisor no longer validates options
+on save. The API token is visible in YAML. Client CA PEM accepts folded or removed
+line breaks. See DOCS.md for formatting and external port mapping.

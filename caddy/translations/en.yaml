@@ -1,12 +1,2 @@
-configuration:
-  cloudflare_api_token:
-    name: Cloudflare API token
-    description: "Zone-scoped token with DNS Edit and Zone Read. Keep the {env.CF_API_TOKEN} placeholder in the JSON."
-  caddy_config:
-    name: Caddy configuration (JSON)
-    description: "For multiline editing use the menu → Edit in YAML and caddy_config: |. Replace all ha.example.com occurrences. Keep the internal listener on 8443; change the external port under Network."
-  client_ca_pem:
-    name: Trusted client CA (public PEM)
-    description: "Paste public CA certificates only, never a private key. Required by the default mTLS policy. Line breaks or a single line are accepted. Clear to remove the generated CA file on restart."
 network:
   8443/tcp: "HTTPS external port (default 443); keep Caddy listening on 8443 inside the container."

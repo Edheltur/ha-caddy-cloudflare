@@ -1,5 +1,9 @@
 # Security policy and threat model
 
+The options UI is YAML-only (`schema: false`). Supervisor does not perform schema
+validation on save. The launcher rejects invalid types, unknown options, malformed
+JSON/CA and excessive sizes at startup. The token is visible in the YAML editor.
+
 ## Trust boundaries
 
 Untrusted internet -> Caddy TLS policy -> exact HTTP host route -> upstream.
