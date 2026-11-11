@@ -15,3 +15,4 @@
 - Refresh test-only cryptography to 50.0.2 and h2 to 4.4.1.
 
 - The full JSON configuration and public client CA are supplied through app options.
+- Build with Go 1.27.4 to fix GO-2026-6859 in net/http.

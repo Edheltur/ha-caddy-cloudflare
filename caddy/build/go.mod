@@ -1,6 +1,6 @@
 module example.invalid/caddy-ha
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/caddy-dns/cloudflare v0.2.4
