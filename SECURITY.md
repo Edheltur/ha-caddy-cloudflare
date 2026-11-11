@@ -28,7 +28,7 @@ actual Caddy process UID.
 | TLS auth bypass by Host or HTTP/2 authority | Global strict SNI/Host, separate TLS policies and tests on a single reused connection |
 | Wildcard certificate accepts unknown SNI | Native JSON exact-name TLS policies; no catch-all; auto-HTTPS policy generation disabled |
 | Direct upstream exposure | Router/firewall must expose only Caddy TCP/443; keep HA authentication enabled |
-| Public MA used to reach HA | No such Caddy route; upstream SSRF and MA credentials need separate application/network controls |
+| Public upstream used to reach HA | Separate routes and TLS policies; upstream SSRF needs separate application and network controls |
 | Caddy compromise | Non-root, no capabilities, narrow mounts; active DNS token and TLS keys remain accessible by necessity |
 | Cross-add-on/host compromise | Outside the isolation guarantees of this app; Supervisor network is shared |
 | Token leak | Options not argv; runtime env placeholder; prevalidation; no debug/env dumps; negative tests |

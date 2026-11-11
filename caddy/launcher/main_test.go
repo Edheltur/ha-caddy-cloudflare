@@ -14,16 +14,16 @@ import (
 
 func TestOptions(t *testing.T) {
 	for _, token := range []string{strings.Repeat("a", 40), "cfut_" + strings.Repeat("x", 64), "cfat_" + strings.Repeat("z", 32)} {
-		if _, err := readOptions(strings.NewReader(`{"cloudflare_api_token":"` + token + `","config_format":"json","caddy_config":"{}"}`)); err != nil {
+		if _, err := readOptions(strings.NewReader(`{"cloudflare_api_token":"` + token + `","caddy_config":"{}"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, data := range []string{
-		`{"cloudflare_api_token":"TOP-SECRET","config_format":"json"}`,
+		`{"cloudflare_api_token":"TOP-SECRET"}`,
 		`{"cloudflare_api_token":"TOP-SECRET`,
-		`{"cloudflare_api_token":"` + strings.Repeat("a", 40) + `","config_format":"../../tmp"}`,
-		`{"cloudflare_api_token":"` + strings.Repeat("a", 40) + `","config_format":"json","other":true}`,
-		`{"cloudflare_api_token":"` + strings.Repeat("a", 40) + `","config_format":"json"} {}`,
+		`{"cloudflare_api_token":"` + strings.Repeat("a", 40) + `"}`,
+		`{"cloudflare_api_token":"` + strings.Repeat("a", 40) + `","caddy_config":"{}","other":true}`,
+		`{"cloudflare_api_token":"` + strings.Repeat("a", 40) + `","caddy_config":"{}"} {}`,
 	} {
 		_, err := readOptions(strings.NewReader(data))
 		if err == nil {
@@ -56,14 +56,14 @@ func TestStorageRejectsSymlink(t *testing.T) {
 }
 
 func TestInlineOptions(t *testing.T) {
-	content := "{\n admin off\n}\n"
-	raw, _ := json.Marshal(options{Token: strings.Repeat("a", 40), Format: "caddyfile", Config: content})
+	content := "{\n \"admin\": {\"disabled\": true}\n}\n"
+	raw, _ := json.Marshal(options{Token: strings.Repeat("a", 40), Config: content})
 	o, err := readOptions(strings.NewReader(string(raw)))
 	if err != nil || o.Config != content {
 		t.Fatal("multiline configuration not preserved", err)
 	}
-	for _, content := range []string{"", " \n", strings.Repeat("x", 128*1024+1), "bad\x00config"} {
-		raw, _ := json.Marshal(options{Token: strings.Repeat("a", 40), Format: "json", Config: content})
+	for _, content := range []string{"", " \n", "null", "[]", "{ admin off }", "{} {}", strings.Repeat("x", 128*1024+1), "bad\x00config"} {
+		raw, _ := json.Marshal(options{Token: strings.Repeat("a", 40), Config: content})
 		if _, err := readOptions(strings.NewReader(string(raw))); err == nil {
 			t.Fatal("accepted invalid config")
 		}

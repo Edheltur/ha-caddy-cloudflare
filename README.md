@@ -40,16 +40,13 @@ Backups contain credentials and private keys as well as configuration options.
 
 See [installation and operations](caddy/DOCS.md),
 [threat model](SECURITY.md), [tests](tests/README.md).
-Examples are in [examples](examples). They are configuration examples, not
-safe universal defaults for arbitrary upstreams. Replace domain names,
-upstream addresses and actual Home Assistant ports before use.
-
-Enter the complete configuration in `caddy_config` using the app settings YAML
-editor; see [complete options example](examples/options.yaml). Supply the public client
-CA in `client_ca_pem`. Configuration is mandatory; no file fallback exists.
+Edit the JSON prefilled in `caddy_config` in the app settings YAML editor.
+The defaults proxy one Home Assistant hostname and require mTLS. Replace the
+hostname, enter the Cloudflare token and supply the public client CA in
+`client_ca_pem`.
 
 Changes require an app restart. Admin API, config persistence, HTTP redirects
-and HTTP/3 are disabled in the examples. DNS-01 requires no inbound port 80.
+and HTTP/3 are disabled in the default configuration. DNS-01 requires no inbound port 80.
 Do not enable Cloudflare's HTTP proxy in front of direct client mTLS.
 
 ## Build

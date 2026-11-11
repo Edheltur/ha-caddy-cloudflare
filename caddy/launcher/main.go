@@ -22,7 +22,6 @@ const uid = 65532
 
 type options struct {
 	Token    string `json:"cloudflare_api_token"`
-	Format   string `json:"config_format"`
 	Config   string `json:"caddy_config"`
 	ClientCA string `json:"client_ca_pem"`
 }
@@ -45,14 +44,11 @@ func readOptions(r io.Reader) (options, error) {
 	if !tokenPattern.MatchString(o.Token) {
 		return options{}, errors.New("invalid Cloudflare token format")
 	}
-	if o.Format != "caddyfile" && o.Format != "json" {
-		return options{}, errors.New("invalid config format")
+	if len(o.Config) > 128*1024 {
+		return options{}, errors.New("Caddy configuration exceeds 128 KiB")
 	}
-	if len(o.Config) > 128*1024 || strings.ContainsRune(o.Config, 0) {
-		return options{}, errors.New("invalid Caddy configuration size or encoding")
-	}
-	if strings.TrimSpace(o.Config) == "" {
-		return options{}, errors.New("empty Caddy configuration")
+	if !strings.HasPrefix(strings.TrimSpace(o.Config), "{") || !json.Valid([]byte(o.Config)) {
+		return options{}, errors.New("caddy_config must be a JSON object")
 	}
 	if o.ClientCA != "" {
 		if err := validateCA(o.ClientCA); err != nil {
@@ -200,10 +196,6 @@ func run() error {
 	if err = prepareStorage("/data"); err != nil {
 		return err
 	}
-	args := []string{"caddy", "run", "--config", "/data/caddy/addon-config", "--adapter", "caddyfile"}
-	if o.Format == "json" {
-		args = []string{"caddy", "run", "--config", "/data/caddy/addon-config"}
-	}
 	if err = os.Chdir("/data/caddy"); err != nil {
 		return errors.New("cannot enter state directory")
 	}
@@ -219,13 +211,11 @@ func run() error {
 			return errors.New("cannot remove stale client CA")
 		}
 	}
-	if o.Config != "" {
-		path, err := writeConfig("/data/caddy", o.Config)
-		if err != nil {
-			return err
-		}
-		args[3] = path
+	path, err := writeConfig("/data/caddy", o.Config)
+	if err != nil {
+		return err
 	}
+	args := []string{"caddy", "run", "--config", path}
 	if err = syscall.Exec("/usr/bin/caddy", args, childEnv(o)); err != nil {
 		return errors.New("cannot execute Caddy")
 	}

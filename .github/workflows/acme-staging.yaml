@@ -21,9 +21,13 @@ jobs:
         env:
           CGO_ENABLED: '0'
         run: go build -mod=readonly -buildvcs=false -trimpath -o ../../caddy-bin .
+      - name: Install test dependencies
+        run: |
+          python3 -m venv .test/venv
+          .test/venv/bin/pip install -r tests/requirements.txt
       - name: Issue staging certificate and verify restart persistence
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           ACME_TEST_DOMAIN: ${{ vars.ACME_TEST_DOMAIN }}
           ACME_ALLOW_DNS_WRITE: 'yes'
-        run: python3 tests/acme_staging.py ./caddy-bin
+        run: .test/venv/bin/python tests/acme_staging.py ./caddy-bin

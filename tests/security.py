@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Offline tests against the actual built Caddy and shipped configuration examples.
+"""Offline tests against the actual built Caddy and the default add-on configuration.
 Test-only Python dependencies never enter the runtime image.
 """
 import base64, copy, datetime as dt, hashlib, http.server, json, os
 from pathlib import Path
-import socket, ssl, struct, subprocess, sys, tempfile, threading, time
+import socket, ssl, subprocess, sys, tempfile, threading, time
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 import h2.connection, h2.config, h2.events
+from defaults import load_default_config
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = str(Path(sys.argv[1] if len(sys.argv)>1 else ROOT/'caddy-bin').resolve())
@@ -61,7 +62,7 @@ def check(c, detail):
 
 def run(config,name):
     port=18443
-    config['apps']['http']['servers']['proxy' if 'proxy' in config['apps']['http']['servers'] else 'srv0']['listen']=['127.0.0.1:'+str(port)]
+    config['apps']['http']['servers']['proxy']['listen']=['127.0.0.1:'+str(port)]
     file=P/(name+'.json');file.write_text(json.dumps(config))
     log=open(P/(name+'.log'),'w+')
     p=subprocess.Popen([BIN,'run','--config',str(file)],env=ENV,stdout=log,stderr=log)
@@ -77,30 +78,33 @@ def stop(p,log):
     check(p.returncode==0,'graceful SIGTERM')
     check(TOKEN not in text,'token absent from logs')
 
-def suite(config,name,strict_unknown=False):
+def suite(config,name,public=False):
     p,log,port=run(config,name)
     try:
         for tls in (ssl.TLSVersion.TLSv1_2,ssl.TLSVersion.TLSv1_3):
-            check(request(port,'ma.example.com',tls=tls)==200,f'{name}: public {tls.name}')
+            if public:
+                check(request(port,'public.example.com',tls=tls)==200,f'{name}: public {tls.name}')
             check(request(port,'ha.example.com',tls=tls) is None,f'{name}: no client rejected {tls.name}')
             for client in ('wrong','expired'):
                 check(request(port,'ha.example.com',client=client,tls=tls) is None,f'{name}: {client} rejected {tls.name}')
             check(request(port,'ha.example.com',client='valid',tls=tls)==200,f'{name}: valid client {tls.name}')
-            check(request(port,'ma.example.com','ha.example.com',tls=tls)==421,f'{name}: Host mismatch {tls.name}')
+            if public:
+                check(request(port,'public.example.com','ha.example.com',tls=tls)==421,f'{name}: Host mismatch {tls.name}')
         check(request(port,'unknown.example.com') is None,f'{name}: unknown SNI rejected')
-        check(request(port,None,'ma.example.com') is None,f'{name}: empty SNI rejected')
-        with connect(port,'ma.example.com',h2=True) as s:
-            check(s.selected_alpn_protocol()=='h2','HTTP/2 ALPN')
-            h=h2.connection.H2Connection(config=h2.config.H2Configuration(client_side=True,header_encoding='utf-8'));h.initiate_connection();s.sendall(h.data_to_send())
-            for sid,host,expected in [(1,'ma.example.com',200),(3,'ha.example.com',421)]:
-                h.send_headers(sid,[(':method','GET'),(':scheme','https'),(':authority',host),(':path','/')],end_stream=True);s.sendall(h.data_to_send());status=None
-                while status is None:
-                    data=s.recv(65536)
-                    if not data:raise AssertionError('HTTP/2 closed before response')
-                    for event in h.receive_data(data):
-                        if isinstance(event,h2.events.ResponseReceived) and event.stream_id==sid:status=int(dict(event.headers)[':status'])
-                    s.sendall(h.data_to_send())
-                check(status==expected,f'HTTP/2 shared connection {host}: {expected}')
+        check(request(port,None,'public.example.com') is None,f'{name}: empty SNI rejected')
+        if public:
+            with connect(port,'public.example.com',h2=True) as s:
+                check(s.selected_alpn_protocol()=='h2','HTTP/2 ALPN')
+                h=h2.connection.H2Connection(config=h2.config.H2Configuration(client_side=True,header_encoding='utf-8'));h.initiate_connection();s.sendall(h.data_to_send())
+                for sid,host,expected in [(1,'public.example.com',200),(3,'ha.example.com',421)]:
+                    h.send_headers(sid,[(':method','GET'),(':scheme','https'),(':authority',host),(':path','/')],end_stream=True);s.sendall(h.data_to_send());status=None
+                    while status is None:
+                        data=s.recv(65536)
+                        if not data:raise AssertionError('HTTP/2 closed before response')
+                        for event in h.receive_data(data):
+                            if isinstance(event,h2.events.ResponseReceived) and event.stream_id==sid:status=int(dict(event.headers)[':status'])
+                        s.sendall(h.data_to_send())
+                    check(status==expected,f'HTTP/2 shared connection {host}: {expected}')
         with connect(port,'ha.example.com',client='valid') as s:
             s.sendall(b'GET /api/websocket HTTP/1.1\r\nHost: ha.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n')
             data=b''
@@ -114,32 +118,40 @@ def suite(config,name,strict_unknown=False):
         for policy in srv['tls_connection_policies']:policy['protocol_min']='tls1.3'
     p,log,port=run(only13,name+'13')
     try:
-        check(request(port,'ma.example.com',tls=ssl.TLSVersion.TLSv1_2) is None,'TLS 1.3-only rejects 1.2')
-        check(request(port,'ma.example.com',tls=ssl.TLSVersion.TLSv1_3)==200,'TLS 1.3-only accepts 1.3')
+        check(request(port,'ha.example.com',client='valid',tls=ssl.TLSVersion.TLSv1_2) is None,'TLS 1.3-only rejects 1.2')
+        check(request(port,'ha.example.com',client='valid',tls=ssl.TLSVersion.TLSv1_3)==200,'TLS 1.3-only accepts 1.3')
     finally:stop(p,log)
 
 with tempfile.TemporaryDirectory(prefix='caddy-security-') as directory:
     P=Path(directory);ca=issue(P,'client-ca');other=issue(P,'other-ca');serverca=issue(P,'server-ca')
     issue(P,'valid',ca);issue(P,'wrong',other);issue(P,'expired',ca,expired=True)
-    for name in ('ha.example.com','ma.example.com','*.example.com'):issue(P,name,serverca,server=True)
+    for name in ('ha.example.com','*.example.com'):issue(P,name,serverca,server=True)
     backend=http.server.ThreadingHTTPServer(('127.0.0.1',0),Backend);threading.Thread(target=backend.serve_forever,daemon=True).start()
     upstream='127.0.0.1:'+str(backend.server_port)
-    def replace(value):
-        return json.loads(json.dumps(value).replace('/data/caddy/client-ca.pem',str(P/'client-ca.pem')).replace('/data/caddy',str(P/'state')).replace('homeassistant:8123',upstream).replace('music-assistant:8095',upstream))
-    cf=(ROOT/'examples/Caddyfile').read_text().replace('/data/caddy/client-ca.pem',str(P/'client-ca.pem')).replace('/data/caddy',str(P/'state'))
-    f=P/'Caddyfile';f.write_text(cf)
-    subprocess.run([BIN,'validate','--config',str(f),'--adapter','caddyfile'],env=ENV,check=True,capture_output=True)
-    adapted=json.loads(subprocess.check_output([BIN,'adapt','--config',str(f),'--adapter','caddyfile'],env=ENV))
-    check(adapted['admin']['disabled'],'Caddyfile admin disabled')
-    check('cloudflare' in json.dumps(adapted),'DNS module configured')
-    for name,config in [('caddyfile',replace(adapted)),('wildcard',replace(json.loads((ROOT/'examples/caddy-wildcard.json').read_text())))]:
-        # First validate the actual DNS configuration without issuing certificates.
-        f=P/(name+'-validate.json');f.write_text(json.dumps(config))
-        subprocess.run([BIN,'validate','--config',str(f)],env=ENV,check=True,capture_output=True)
-        certnames=['*.example.com'] if name=='wildcard' else ['ha.example.com','ma.example.com']
-        config['apps']['tls']={'certificates':{'load_files':[{'certificate':str(P/(n+'.pem')),'key':str(P/(n+'.key'))} for n in certnames]}}
-        for srv in config['apps']['http']['servers'].values():srv['automatic_https']={'disable':True}
-        suite(config,name)
+    config=load_default_config()
+    check(config['admin']['disabled'],'default admin API disabled')
+    tls=config['apps']['tls']
+    check(tls['certificates']['automate']==['ha.example.com'],'default certificate covers only HA')
+    issuer=tls['automation']['policies'][0]['issuers'][0]
+    check(issuer['challenges']['dns']['provider']=={'name':'cloudflare','api_token':'{env.CF_API_TOKEN}'},'default uses Cloudflare DNS-01')
+    srv=config['apps']['http']['servers']['proxy']
+    srv['tls_connection_policies'][0]['client_authentication']['ca']['pem_files']=[str(P/'client-ca.pem')]
+    config['storage']['root']=str(P/'state')
+    srv['routes'][0]['handle'][0]['upstreams']=[{'dial':upstream}]
+    f=P/'default-validate.json';f.write_text(json.dumps(config))
+    subprocess.run([BIN,'validate','--config',str(f)],env=ENV,check=True,capture_output=True)
+    config['apps']['tls']={'certificates':{'load_files':[{'certificate':str(P/'ha.example.com.pem'),'key':str(P/'ha.example.com.key')}]}}
+    suite(config,'default')
+
+    # Use a shared wildcard certificate to exercise cross-host HTTP/2 reuse.
+    multi=copy.deepcopy(config)
+    srv=multi['apps']['http']['servers']['proxy']
+    srv['tls_connection_policies'].append({'match':{'sni':['public.example.com']},'protocol_min':'tls1.2'})
+    route=copy.deepcopy(srv['routes'][0])
+    route['match']=[{'host':['public.example.com']}]
+    srv['routes'].insert(1,route)
+    multi['apps']['tls']['certificates']['load_files']=[{'certificate':str(P/'*.example.com.pem'),'key':str(P/'*.example.com.key')}]
+    suite(multi,'shared-wildcard',public=True)
     # Offline persistence uses a real Caddy internal CA, not a sentinel file.
     storage=str(P/'persistent')
     internal={'admin':{'disabled':True,'config':{'persist':False}},'storage':{'module':'file_system','root':storage},'apps':{'pki':{'certificate_authorities':{'local':{'install_trust':False}}},'tls':{'certificates':{'automate':['localhost']},'automation':{'policies':[{'subjects':['localhost'],'issuers':[{'module':'internal'}]}]}},'http':{'grace_period':'1s','servers':{'proxy':{'listen':['127.0.0.1:18443'],'protocols':['h1','h2'],'automatic_https':{'disable':True},'tls_connection_policies':[{'match':{'sni':['localhost']}}],'routes':[{'handle':[{'handler':'static_response','body':'ok'}]}]}}}}}

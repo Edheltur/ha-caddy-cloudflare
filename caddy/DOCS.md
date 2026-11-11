@@ -37,68 +37,28 @@ the launcher passes it as `CF_API_TOKEN`, never as an argument. Do not run
 
 ## Configuration in Home Assistant
 
-All user configuration is supplied through the app options. No external
-configuration folder is mounted. In Configuration, select **Edit in YAML**:
+Open the app's **Configuration → Edit in YAML**. The default JSON in
+`caddy_config` sets up one HTTPS host with required mTLS and a server
+certificate for that exact name.
 
-```yaml
-cloudflare_api_token: "YOUR_TOKEN"
-config_format: caddyfile
-client_ca_pem: |
-  -----BEGIN CERTIFICATE-----
-  PASTE_YOUR_PUBLIC_CA_CERTIFICATE_HERE
-  -----END CERTIFICATE-----
-caddy_config: |
-  # Paste the complete examples/Caddyfile here with two-space indentation.
-```
+1. Enter your zone-scoped token in `cloudflare_api_token`.
+2. Paste the public client CA certificate into `client_ca_pem` as a YAML
+   literal block (`|`) with two-space indentation. A bundle of public CA
+   certificates is supported. Keep the CA private key on your signing device.
+3. Replace every `ha.example.com` in the prefilled `caddy_config` with your
+   hostname. Change `homeassistant:8123` if HA uses a different listener.
+4. Save, start the app and inspect its log. Restart after later changes.
 
-Use `examples/options.yaml` as the complete starting point. Replace the token,
-exact domain names and upstream addresses. `homeassistant:8123` is the usual HA
-listener; use the actual reachable hostname/IP and port for Music Assistant.
-`localhost` refers to this container, not another app.
+The app creates `/data/caddy/client-ca.pem` from the PEM option. Keep that
+path in the default JSON trust pool. Clearing the option removes this file
+on restart. The default configuration requires the CA to start. The JSON
+and PEM fields each have a 128 KiB limit. Leave the Cloudflare token
+placeholder `{env.CF_API_TOKEN}` in the JSON.
 
-`caddy_config` is mandatory. Select `config_format: json` to provide native JSON
-in the same option. `client_ca_pem` accepts public CA certificates, including a
-bundle for rotation; private keys, leaf certificates and malformed input are
-rejected without logging their content. Leave it empty only when client CA
-trust is not needed (for example public HTTPS-only configuration).
-
-The launcher writes `/data/caddy/addon-config` and, if provided,
-`/data/caddy/client-ca.pem` atomically as UID 65532, mode 0600. The examples use
-`/data/caddy/client-ca.pem` in their trust pool. Clearing the CA option removes
-the generated CA on restart; a configuration still requiring that file fails
-startup. No old external files or generated config are used as fallback.
-Each option has a 128 KiB content limit. Caddy validates routing/TLS syntax.
-Never put secrets directly in Caddy config: use `{env.CF_API_TOKEN}`. Syntax
-errors from Caddy can quote configuration fragments.
-
-Save and restart after any change; existing WebSockets reconnect. Admin API is
-disabled, so `caddy reload` is not available. Supervisor stops via SIGTERM.
-Keep HA login/MFA enabled. Test client-certificate support in each browser/app.
-
-Migration from the earlier experimental file-based version: paste Caddyfile or
-JSON into `caddy_config`, paste the public CA into `client_ca_pem`, and replace
-old trust-pool paths with `/data/caddy/client-ca.pem`. Back up options and data
-before updating. Old `/config` files are no longer mounted or read.
-
-## Wildcard and TLS policies
-
-Paste `examples/caddy-wildcard.json` into `caddy_config` and choose
-`config_format: json`. Replace `*.example.com` in both certificate automation
-locations; replace exact HA/MA names in both TLS policies and HTTP routes.
-The wildcard controls certificate issuance, **not a wildcard upstream route**.
-
-The JSON example explicitly disables automatic HTTP policy generation and
-supplies exact SNI policies. Unknown or missing SNI has no matching TLS policy,
-even if the loaded wildcard certificate would cover it. Do not add a catch-all
-TLS policy, default/fallback SNI, on-demand TLS, or a wildcard host route.
-
-TLS 1.2+ is default. For TLS 1.3-only set `protocols tls1.3 tls1.3` in each
-Caddyfile site, or `protocol_min: tls1.3` in each JSON TLS policy. Keep
-`strict_sni_host` enabled globally. HTTP/2 coalescing across different names is
-intentionally refused with 421; clients must open the appropriate connection.
-
-Use Cloudflare DNS-only records for direct client mTLS. An intermediate HTTP
-proxy terminates the client's TLS and changes which certificate Caddy sees.
+The default disables the Admin API, accepts TLS 1.2 and later, and checks
+that the request Host matches its TLS SNI. Set `protocol_min` to `tls1.3` if
+all clients support TLS 1.3. Keep exact SNI and Host policies for protected
+hosts. Use Cloudflare DNS-only records so the client's TLS reaches Caddy.
 
 ## Home Assistant
 
@@ -110,9 +70,7 @@ Do not add the internet, all private ranges or client addresses as trusted proxi
 Keep HA login/MFA enabled: mTLS is an additional gate, not a HA user identity.
 
 WebSocket support is built into Caddy reverse_proxy. Client-certificate support
-in every browser, companion application and media client must be tested; some
-clients cannot supply a certificate. MA is publicly reachable without mTLS:
-configure its authentication and permissions accordingly.
+depends on the browser and companion app. Test each intended client.
 
 ## External client certificate issuance
 
@@ -151,7 +109,7 @@ connections are not retroactively authenticated until closed.
 
 ## Verify from outside your network
 
-Set HA/MA DNS names and the public IPv4 address below. Keep server certificate
+Set the HA DNS name and public IPv4 address below. Keep server certificate
 verification enabled (do not use curl `-k`). The public CA bundle used for the
 server is different from the private CA used to issue client certificates.
 
@@ -159,16 +117,13 @@ server is different from the private CA used to issue client certificates.
 curl --resolve ha.example.com:443:PUBLIC_IPV4 https://ha.example.com/
 curl --cert phone.pem --key phone.key \
   --resolve ha.example.com:443:PUBLIC_IPV4 https://ha.example.com/
-curl --resolve ma.example.com:443:PUBLIC_IPV4 https://ma.example.com/
-curl --http2 --resolve ma.example.com:443:PUBLIC_IPV4 \
-  -H 'Host: ha.example.com' https://ma.example.com/
 openssl s_client -connect PUBLIC_IPV4:443 -servername ha.example.com \
   -verify_hostname ha.example.com -verify_return_error -tls1_3 \
   -cert phone.pem -key phone.key
 ```
 
-Expected: first fails TLS client authentication; second reaches HA (possibly
-its login/redirect); third reaches MA; fourth is 421, never HA. The OpenSSL
+The first request fails TLS client authentication. The second reaches HA
+and can return its login page or redirect. The OpenSSL
 command must validate the server and complete with the valid client. Repeat
 with `-tls1_2`; this must fail only if 1.3-only was configured. A TLS 1.3 client
 can receive the client-auth alert on its first read rather than at connect.

@@ -10,11 +10,12 @@ python3 -m venv .test/venv
 .test/venv/bin/python tests/security.py ./caddy-bin
 ```
 
-`security.py` validates the shipped Caddyfile and wildcard JSON, substitutes
+`security.py` validates the JSON default from `caddy/config.yaml`, substitutes
 locally generated server/client certificates and loopback upstreams, then runs
 TLS 1.2/1.3, missing/foreign/expired/valid clients, public HTTPS, missing/unknown
 SNI, Host mismatch, actual HTTP/2 connection reuse, WebSocket frame forwarding,
-TLS 1.3-only and SIGTERM/log checks. No production secrets, DNS writes or ACME
+TLS 1.3-only and SIGTERM/log checks. A test-only public hostname shares a
+wildcard certificate with HA for the cross-host HTTP/2 checks. No production secrets, DNS writes or ACME
 issuance occur here. Client-side verification is disabled ONLY for ephemeral
 server fixtures; server-side client verification remains the subject of testing.
 
@@ -50,10 +51,10 @@ from main, uses the protected `acme-staging` environment, and injects secrets
 only into the final test step. Set environment secret `CF_API_TOKEN` and variable
 `ACME_TEST_DOMAIN` (an ordinary exact hostname in the test zone).
 
-Locally set those environment variables securely, then run:
+Locally, install the test requirements and set those environment variables securely, then run:
 
 ```sh
-ACME_ALLOW_DNS_WRITE=yes python3 tests/acme_staging.py ./caddy-bin
+ACME_ALLOW_DNS_WRITE=yes .test/venv/bin/python tests/acme_staging.py ./caddy-bin
 ```
 
 The script uses Let's Encrypt staging, performs real DNS-01 issuance, restarts
@@ -68,7 +69,8 @@ renewal coverage: verify renewal in a long-running staging acceptance deployment
 - Record HA OS, Supervisor and Core versions; install on RPi4 aarch64.
 - Keep Protection mode/AppArmor enabled; verify options-based config and CA permissions.
 - Verify first start with root-owned /data, no extra permissions, only TCP/443.
-- Verify HA and MA actual upstream addresses/ports, public DNS and external mTLS.
+- Verify HA upstream address/port, public DNS and external mTLS.
+- Verify the JSON default appears in HA, then edit, save and apply it.
 - Verify companion-app client certificates and WebSocket reconnect after restart.
 - Issue and renew a staging certificate with the real DNS provider.
 - Update and roll back; verify ACME identity and certificates are retained.

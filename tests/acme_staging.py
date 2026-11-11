@@ -4,6 +4,7 @@ Never run in pull_request workflows. Logs remain private; only generic errors pr
 """
 import hashlib,json,os,socket,ssl,subprocess,sys,tempfile,time
 from pathlib import Path
+from defaults import load_default_config
 ROOT=Path(__file__).resolve().parents[1]
 BIN=str(Path(sys.argv[1] if len(sys.argv)>1 else ROOT/'caddy-bin').resolve())
 token=os.environ['CF_API_TOKEN'];domain=os.environ['ACME_TEST_DOMAIN']
@@ -12,7 +13,7 @@ assert os.environ.get('ACME_ALLOW_DNS_WRITE')=='yes', 'explicit opt-in required'
 port=20443
 with tempfile.TemporaryDirectory(prefix='acme-staging-') as td:
     root=Path(td);state=root/'state';state.mkdir(mode=0o700)
-    c=json.loads((ROOT/'examples/caddy-wildcard.json').read_text())
+    c=load_default_config()
     c['storage']['root']=str(state)
     srv=c['apps']['http']['servers']['proxy'];srv['listen']=['127.0.0.1:'+str(port)]
     srv['tls_connection_policies']=[{'match':{'sni':[domain]},'protocol_min':'tls1.2'}]

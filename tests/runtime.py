@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='launcher-test-') as td:
     for d in ('data','usr/bin','dev'): (root/d).mkdir(parents=True,exist_ok=True)
     # Internal CA exercises real Caddy persistent private-key storage, offline.
     cfg={'admin':{'disabled':True,'config':{'persist':False}},'storage':{'module':'file_system','root':'/data/caddy'},'apps':{'pki':{'certificate_authorities':{'local':{'install_trust':False}}},'tls':{'certificates':{'automate':['localhost']},'automation':{'policies':[{'subjects':['localhost'],'issuers':[{'module':'internal'}]}]}},'http':{'grace_period':'1s','servers':{'test':{'listen':['0.0.0.0:19443'],'protocols':['h1','h2'],'automatic_https':{'disable':True},'tls_connection_policies':[{'match':{'sni':['localhost']}}],'routes':[{'handle':[{'handler':'static_response','body':'ok'}]}]}}}}}
-    (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg)}))
+    (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'caddy_config':json.dumps(cfg)}))
     if not image:
         shutil.copyfile(ROOT/'launcher-bin',root/'usr/bin/launcher');shutil.copyfile(ROOT/'caddy-bin',root/'usr/bin/caddy')
         for f in (root/'usr/bin').iterdir(): f.chmod(0o755)
@@ -50,11 +50,11 @@ with tempfile.TemporaryDirectory(prefix='launcher-test-') as td:
             cfg['apps']['http']['servers']['test']['tls_connection_policies'][0]['client_authentication']={'mode':'require_and_verify','ca':{'provider':'file','pem_files':['/data/caddy/client-ca.pem']}}
             ca=(root/'data/caddy/pki/authorities/local/root.crt').read_text()
             (root/'data/caddy/addon-config').unlink()
-            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg),'client_ca_pem':ca}))
+            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'caddy_config':json.dumps(cfg),'client_ca_pem':ca}))
         if iteration == 2:
             del cfg['apps']['http']['servers']['test']['tls_connection_policies'][0]['client_authentication']
             (root/'data/caddy/addon-config').unlink()
-            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'config_format':'json','caddy_config':json.dumps(cfg),'client_ca_pem':''}))
+            (root/'data/options.json').write_text(json.dumps({'cloudflare_api_token':TOKEN,'caddy_config':json.dumps(cfg),'client_ca_pem':''}))
         handle,pid=start()
         try:
             for _ in range(150):
@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='launcher-test-') as td:
             hashes=now
         finally:stop(handle)
     # Malformed credentials must never reach the module's unsafe error message.
-    (root/'data/options.json').write_text('{"cloudflare_api_token":"MALFORMED-SECRET","config_format":"json"}')
+    (root/'data/options.json').write_text('{"cloudflare_api_token":"MALFORMED-SECRET"}')
     if not image:
         result=subprocess.run(['chroot',str(root),'/usr/bin/launcher'],capture_output=True)
         check(result.returncode!=0 and b'MALFORMED-SECRET' not in result.stderr,'invalid token rejected without disclosure')
