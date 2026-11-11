@@ -43,6 +43,10 @@ secrets into config literals, enable trace/debug, or publish real credential
 logs to diagnose failures. Secret scans with test values do not prove that
 arbitrary future upstream error paths can never disclose a secret.
 
+The builder and CI use Go 1.27.4, which includes the fix for
+[GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859) in the HTTP server.
+The runtime contains the resulting static binaries.
+
 ## Temporary dependency pin
 
 The build pins `go-jose/v3` to upstream commit
