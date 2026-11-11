@@ -30,6 +30,10 @@ test-only public hostname shares a wildcard certificate with HA for the
 cross-host checks. `TestInternalStorage` checks key reuse across SIGTERM and
 restart. Offline tests do not write DNS records or use production credentials.
 
+Launcher unit tests cover multiline/one-line/folded CA input, bundles, malformed
+leading blocks, private-key rejection and non-disclosure. Container tests paste
+a CA without line breaks and verify the canonical file and actual mTLS.
+
 Launcher unit tests run in the existing launcher module:
 
 ```sh

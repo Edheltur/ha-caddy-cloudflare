@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.1 — unreleased
+
+- Normalize client CA PEM pasted into HA single-line fields or folded YAML; preserve certificate bytes.
+- Reject malformed certificate blocks instead of skipping to a later valid block.
+- Add English/Russian option labels and editing guidance; native multiline form fields are not supported by HA.
+- Document YAML formatting and using a different external HTTPS port.
+
+## 0.1.0
 
 - ARM64 Home Assistant app with Caddy 2.11.9 and Cloudflare DNS provider 0.2.4.
 - Scratch runtime with non-root Caddy, a static launcher and persistent ACME storage.

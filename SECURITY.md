@@ -8,6 +8,10 @@ maintainers are trusted. User-supplied Caddy configuration is executable policy:
 it can re-enable listeners, expose files or proxy elsewhere. This app does not
 sandbox an administrator against their own configuration changes.
 
+The launcher normalizes CA PEM whitespace only, preserves certificate DER bytes,
+and rejects every malformed/non-CA block or private key. It never skips a bad
+block to accept a later valid certificate.
+
 The launcher reads only the supported options, rejects malformed credentials
 without echoing them, creates `/data/caddy` without following a symlink, restricts
 permissions and executes Caddy with a minimal environment. It does not generate

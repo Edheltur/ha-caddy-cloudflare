@@ -86,7 +86,7 @@ func TestRuntime(t *testing.T) {
 			settings := &tls.Config{ServerName: "localhost", InsecureSkipVerify: true}
 			var caPEM string
 			if name == "client-ca" {
-				caPEM = string(ca.pem)
+				caPEM = strings.ReplaceAll(string(ca.pem), "\n", "") // HA single-line input
 				policy["client_authentication"] = object{"mode": "require_and_verify", "ca": object{"provider": "file", "pem_files": []string{"/data/caddy/client-ca.pem"}}}
 				settings.Certificates = []tls.Certificate{client.pair}
 			} else {

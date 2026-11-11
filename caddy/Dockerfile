@@ -12,7 +12,7 @@ COPY launcher/*.go ./
 RUN go test -mod=readonly ./... && go build -buildvcs=false -mod=readonly -trimpath -ldflags="-s -w" -o /out/launcher .
 
 FROM scratch
-ARG BUILD_VERSION=0.1.0
+ARG BUILD_VERSION=0.1.1
 LABEL io.hass.type="app" io.hass.arch="aarch64" io.hass.version="${BUILD_VERSION}" \
       org.opencontainers.image.title="Caddy Cloudflare mTLS" \
       org.opencontainers.image.licenses="Apache-2.0"
