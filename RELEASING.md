@@ -53,4 +53,4 @@ writers: restrict package write access and publish only through this workflow.
 
 Retain previous version tags and encrypted cold backups. Restore the previous
 app version and its backup using HA's supported restore flow; verify account and
-certificate reuse. Never delete /data to repair an update. 
+certificate reuse. Never delete /data to repair an update.
