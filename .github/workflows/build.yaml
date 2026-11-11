@@ -1,0 +1,133 @@
+name: Build and security checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish an approved version tag to GHCR'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: caddy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.4'
+          cache-dependency-path: |
+            caddy/build/go.sum
+            caddy/launcher/go.sum
+      - name: Module integrity and vulnerability checks
+        run: |
+          cd caddy/build
+          go mod verify
+          go test -mod=readonly ./integration -run '^TestReleaseTagGuard$'
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+          cd ../launcher
+          go mod verify
+          go test ./...
+          go vet ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: Build runtime (never push in PR)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: caddy
+          platforms: linux/arm64
+          load: true
+          push: false
+          tags: caddy-ha:test
+      - name: Test binaries and actual runtime image
+        run: bash .github/scripts/test-image.sh caddy-ha:test
+      - name: Scan runtime image
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
+        with:
+          image-ref: caddy-ha:test
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          scanners: vuln
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    environment: ghcr-release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify trusted release commit and version
+        id: release
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version=${RELEASE_REF#v}
+          grep -Fxq -- "version: $version" caddy/config.yaml
+          image="ghcr.io/${REPOSITORY,,}/caddy"
+          grep -Fxq -- "image: $image" caddy/config.yaml
+          printf 'version=%s\nimage=ghcr.io/%s/caddy\n' "$version" "${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build release candidate by digest (no release tag yet)
+        id: candidate
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: caddy
+          platforms: linux/arm64
+          outputs: type=image,name=${{ steps.release.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          build-args: BUILD_VERSION=${{ steps.release.outputs.version }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          sbom: true
+          provenance: mode=max
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.4'
+          cache-dependency-path: caddy/build/go.sum
+      - name: Test the exact release candidate
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+        run: |
+          docker pull "$IMAGE@$DIGEST"
+          bash .github/scripts/test-image.sh "$IMAGE@$DIGEST"
+      - name: Scan the exact release candidate
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
+        with:
+          image-ref: ${{ steps.release.outputs.image }}@${{ steps.candidate.outputs.digest }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          scanners: vuln
+      - name: Tag the tested digest without rebuilding
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          VERSION: ${{ steps.release.outputs.version }}
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+        run: |
+          bash .github/scripts/require-new-tag.sh "$IMAGE:$VERSION"
+          docker buildx imagetools create --tag "$IMAGE:$VERSION" "$IMAGE@$DIGEST"
+          actual=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{.Manifest.Digest}}')
+          test "$actual" = "$DIGEST"

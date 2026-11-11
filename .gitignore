@@ -1,0 +1,10 @@
+.test/
+*.pem
+*.key
+*.p12
+options.json
+caddy-bin
+launcher-bin
+*.test
+.*results.txt
+.*vuln*.txt

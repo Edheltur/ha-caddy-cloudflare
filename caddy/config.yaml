@@ -1,0 +1,143 @@
+name: Caddy Cloudflare mTLS
+version: 0.1.0
+slug: caddy
+description: Caddy reverse proxy with Cloudflare DNS-01 and per-host mTLS
+arch:
+  - aarch64
+startup: services
+boot: manual
+stage: experimental
+init: true
+timeout: 30
+ports:
+  8443/tcp: 443
+ports_description:
+  8443/tcp: HTTPS (HTTP/1.1 and HTTP/2)
+backup: cold
+options:
+  cloudflare_api_token: ""
+  caddy_config: |
+    {
+      "admin": {
+        "disabled": true,
+        "config": {
+          "persist": false
+        }
+      },
+      "storage": {
+        "module": "file_system",
+        "root": "/data/caddy"
+      },
+      "apps": {
+        "http": {
+          "grace_period": "15s",
+          "servers": {
+            "proxy": {
+              "listen": [
+                "0.0.0.0:8443"
+              ],
+              "protocols": [
+                "h1",
+                "h2"
+              ],
+              "strict_sni_host": true,
+              "automatic_https": {
+                "disable": true
+              },
+              "tls_connection_policies": [
+                {
+                  "match": {
+                    "sni": [
+                      "ha.example.com"
+                    ]
+                  },
+                  "protocol_min": "tls1.2",
+                  "client_authentication": {
+                    "mode": "require_and_verify",
+                    "ca": {
+                      "provider": "file",
+                      "pem_files": [
+                        "/data/caddy/client-ca.pem"
+                      ]
+                    }
+                  }
+                }
+              ],
+              "routes": [
+                {
+                  "match": [
+                    {
+                      "host": [
+                        "ha.example.com"
+                      ]
+                    }
+                  ],
+                  "handle": [
+                    {
+                      "handler": "reverse_proxy",
+                      "upstreams": [
+                        {
+                          "dial": "homeassistant:8123"
+                        }
+                      ]
+                    }
+                  ],
+                  "terminal": true
+                },
+                {
+                  "handle": [
+                    {
+                      "handler": "static_response",
+                      "status_code": 421
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "tls": {
+          "certificates": {
+            "automate": [
+              "ha.example.com"
+            ]
+          },
+          "automation": {
+            "policies": [
+              {
+                "subjects": [
+                  "ha.example.com"
+                ],
+                "issuers": [
+                  {
+                    "module": "acme",
+                    "ca": "https://acme-v02.api.letsencrypt.org/directory",
+                    "challenges": {
+                      "http": {
+                        "disabled": true
+                      },
+                      "tls-alpn": {
+                        "disabled": true
+                      },
+                      "dns": {
+                        "provider": {
+                          "name": "cloudflare",
+                          "api_token": "{env.CF_API_TOKEN}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  client_ca_pem: ""
+schema:
+  cloudflare_api_token: password
+  caddy_config: str(1,131072)
+  client_ca_pem: str?
+url: https://github.com/Edheltur/ha-caddy-cloudflare/tree/main/caddy
+image: ghcr.io/edheltur/ha-caddy-cloudflare/caddy

@@ -1,0 +1,33 @@
+name: Real ACME staging (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  staging:
+    if: github.ref == 'refs/heads/main'
+    environment: acme-staging
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.4'
+          cache-dependency-path: caddy/build/go.sum
+      - name: Build trusted code before injecting credentials
+        working-directory: caddy/build
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          go build -mod=readonly -buildvcs=false -trimpath -o ../../caddy-bin .
+          go test -mod=readonly -c -o ../../acme-staging.test ./integration
+      - name: Issue staging certificate and verify restart persistence
+        working-directory: caddy/build/integration
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          ACME_TEST_DOMAIN: ${{ vars.ACME_TEST_DOMAIN }}
+          CADDY_TEST_BINARY: ${{ github.workspace }}/caddy-bin
+          ACME_ALLOW_DNS_WRITE: 'yes'
+        run: ../../../acme-staging.test -test.v -test.run '^TestACMEStaging$'
