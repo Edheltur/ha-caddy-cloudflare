@@ -2,8 +2,8 @@
 package main
 
 import (
-	"bytes"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -51,38 +51,53 @@ func readOptions(r io.Reader) (options, error) {
 		return options{}, errors.New("caddy_config must be a JSON object")
 	}
 	if o.ClientCA != "" {
-		if err := validateCA(o.ClientCA); err != nil {
+		normalized, err := normalizeCA(o.ClientCA)
+		if err != nil {
 			return options{}, err
 		}
+		o.ClientCA = normalized
 	}
 	return o, nil
 }
 
-// Accept public CA certificates only, including bundles for CA rotation.
-func validateCA(value string) error {
+// Normalize only PEM framing and ASCII whitespace lost/folded by HA text fields.
+// Decode each envelope explicitly: pem.Decode can skip a malformed first block.
+// Certificate parsing and validation remain entirely in the Go standard library.
+func normalizeCA(value string) (string, error) {
 	invalid := errors.New("client_ca_pem must contain only public CA certificates (max 128 KiB)")
 	if len(value) > 128*1024 {
-		return invalid
+		return "", invalid
 	}
-	rest := bytes.TrimSpace([]byte(value))
-	if len(rest) == 0 {
-		return invalid
+	rest := strings.TrimSpace(value)
+	if rest == "" {
+		return "", invalid
 	}
-	for len(rest) > 0 {
-		if !bytes.HasPrefix(rest, []byte("-----BEGIN CERTIFICATE-----")) {
-			return invalid
+	var normalized strings.Builder
+	whitespace := strings.NewReplacer(" ", "", "\t", "", "\r", "", "\n", "")
+	for rest != "" {
+		body, ok := strings.CutPrefix(rest, "-----BEGIN CERTIFICATE-----")
+		if !ok {
+			return "", invalid
 		}
-		block, tail := pem.Decode(rest)
-		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
-			return invalid
+		encoded, tail, ok := strings.Cut(body, "-----END CERTIFICATE-----")
+		if !ok {
+			return "", invalid
 		}
-		cert, err := x509.ParseCertificate(block.Bytes)
+		der, err := base64.StdEncoding.Strict().DecodeString(whitespace.Replace(encoded))
+		if err != nil {
+			return "", invalid
+		}
+		cert, err := x509.ParseCertificate(der)
 		if err != nil || !cert.BasicConstraintsValid || !cert.IsCA {
-			return invalid
+			return "", invalid
 		}
-		rest = bytes.TrimSpace(tail)
+		normalized.Write(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+		if normalized.Len() > 128*1024 {
+			return "", invalid
+		}
+		rest = strings.TrimSpace(tail)
 	}
-	return nil
+	return normalized.String(), nil
 }
 
 // Only touch the dedicated state directory itself, never recursively chown

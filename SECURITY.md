@@ -1,5 +1,9 @@
 # Security policy and threat model
 
+The options UI is YAML-only (`schema: false`). Supervisor does not perform schema
+validation on save. The launcher rejects invalid types, unknown options, malformed
+JSON/CA and excessive sizes at startup. The token is visible in the YAML editor.
+
 ## Trust boundaries
 
 Untrusted internet -> Caddy TLS policy -> exact HTTP host route -> upstream.
@@ -7,6 +11,10 @@ The configuration administrator, Supervisor, HA OS host and build/release
 maintainers are trusted. User-supplied Caddy configuration is executable policy:
 it can re-enable listeners, expose files or proxy elsewhere. This app does not
 sandbox an administrator against their own configuration changes.
+
+The launcher normalizes CA PEM whitespace only, preserves certificate DER bytes,
+and rejects every malformed/non-CA block or private key. It never skips a bad
+block to accept a later valid certificate.
 
 The launcher reads only the supported options, rejects malformed credentials
 without echoing them, creates `/data/caddy` without following a symlink, restricts

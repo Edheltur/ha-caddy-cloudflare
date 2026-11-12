@@ -116,9 +116,24 @@ func TestClientCA(t *testing.T) {
 	}
 	good := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 	for _, value := range []string{good, good + good} {
-		if err := validateCA(value); err != nil {
+		if _, err := normalizeCA(value); err != nil {
 			t.Fatal(err)
 		}
+	}
+	for _, tc := range []struct{ name, value, want string }{
+		{"LF", good, good},
+		{"CRLF", strings.ReplaceAll(good, "\n", "\r\n"), good},
+		{"folded", strings.ReplaceAll(good, "\n", " "), good},
+		{"single-line", strings.ReplaceAll(good, "\n", ""), good},
+		{"bundle", strings.ReplaceAll(good+good, "\n", ""), good + good},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, _ := json.Marshal(options{Token: strings.Repeat("a", 40), Config: "{}", ClientCA: tc.value})
+			o, err := readOptions(strings.NewReader(string(raw)))
+			if err != nil || o.ClientCA != tc.want {
+				t.Fatalf("CA normalization failed: %v", err)
+			}
+		})
 	}
 	cert.IsCA = false
 	der, err = x509.CreateCertificate(rand.Reader, cert, cert, pub, priv)
@@ -126,8 +141,14 @@ func TestClientCA(t *testing.T) {
 		t.Fatal(err)
 	}
 	leaf := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
-	for _, value := range []string{" ", good + "secret", leaf, "-----BEGIN PRIVATE KEY-----\nSECRET\n-----END PRIVATE KEY-----", strings.Repeat("x", 128*1024+1)} {
-		if err := validateCA(value); err == nil {
+	for _, value := range []string{" ", good + "secret", leaf,
+		"-----BEGIN CERTIFICATE-----\nINVALID\n" + good,
+		"-----BEGIN CERTIFICATE-----\nINVALID\n-----END CERTIFICATE-----\n" + good,
+		strings.Replace(good, "-----END CERTIFICATE-----", "-----END PRIVATE KEY-----", 1),
+		strings.Replace(good, "-----BEGIN CERTIFICATE-----", "-----BEGIN CERTIFICATE-----\nComment: unsupported", 1),
+		good + "-----BEGIN PRIVATE KEY-----SECRET-----END PRIVATE KEY-----",
+		"-----BEGIN PRIVATE KEY-----\nSECRET\n-----END PRIVATE KEY-----", strings.Repeat("x", 128*1024+1)} {
+		if _, err := normalizeCA(value); err == nil {
 			t.Fatal("accepted invalid CA")
 		} else if strings.Contains(err.Error(), "SECRET") {
 			t.Fatal("leaked content")

@@ -10,7 +10,10 @@ until you have an encrypted backup and a verified restore procedure.
 
 The host must have TCP/443 available by default. Change the host port in the
 app Network settings if needed; leave the JSON listener at 0.0.0.0:8443. Publish/forward only TCP/443 to HA OS.
-Do not expose upstream ports, UDP/443 or TCP/80. Outbound DNS, HTTPS to Cloudflare
+Do not expose upstream ports, UDP/443 or TCP/80. If you select host port 9443,
+connect locally with `https://your-hostname:9443`; the internal listener remains
+8443. For public standard HTTPS, map router TCP/443 to HA host TCP/9443 in that
+case. The router targets the host port, not the internal container port. Outbound DNS, HTTPS to Cloudflare
 and Let's Encrypt, and access to configured upstreams are required.
 
 ## Cloudflare token
@@ -27,14 +30,14 @@ stronger separation, delegate ACME challenges to a dedicated DNS zone and
 configure Caddy's supported challenge delegation; test it before deployment.
 Ensure token expiry will not silently break certificate renewal.
 
-Enter the token in `cloudflare_api_token` in the app configuration. `password`
-means UI masking, not encryption at rest. Supervisor writes it to options;
+Enter the token in `cloudflare_api_token` in the app configuration. It is visible
+in the YAML editor and stored in Supervisor options;
 the launcher passes it as `CF_API_TOKEN`, never as an argument. Do not run
 `caddy environ`, `--environ` or debug/trace with production credentials.
 
 ## Configuration in Home Assistant
 
-Open the app's **Configuration → Edit in YAML**. The default JSON in
+Open the app's **Configuration** tab. Options are edited only in YAML. The default JSON in
 `caddy_config` sets up one HTTPS host with required mTLS and a server
 certificate for that exact name.
 
@@ -45,6 +48,30 @@ certificate for that exact name.
 3. Replace every `ha.example.com` in the prefilled `caddy_config` with your
    hostname. Change `homeassistant:8123` if HA uses a different listener.
 4. Save, start the app and inspect its log. Restart after later changes.
+
+### Multiline editing
+
+The app uses `schema: false` to show only the YAML editor. Supervisor does not
+validate option types or required values when saving. The launcher validates
+options, JSON syntax, CA certificates and size limits when starting; Caddy
+validates its configuration on load. Invalid settings can be saved but will
+prevent startup. The API token is visible in YAML: do not share screenshots or
+copy the options into public logs/issues.
+
+Keep `caddy_config: |` and
+`client_ca_pem: |` on their own lines, with every content line indented at least
+two spaces. `|-` also preserves line breaks, removing only the final newline.
+`>` and `>-` fold some line breaks into spaces. The UI may choose its own YAML
+style when reserializing options; the add-on cannot control that presentation.
+Changing `>-` to `|` does not pretty-print JSON that has already become one line.
+Whitespace outside JSON strings does not change the configuration's meaning.
+
+The launcher accepts
+normal PEM, CRLF, folded spaces, or removed line breaks and writes canonical
+PEM after validating every certificate. The certificate bytes are unchanged.
+Malformed blocks, extra text, PEM headers and private keys are rejected, even
+when followed by a valid CA. Clearing the option still removes the trust file.
+The launcher does not rewrite Supervisor options or repair the editor display.
 
 The app creates `/data/caddy/client-ca.pem` from the PEM option. Keep that
 path in the default JSON trust pool. Clearing the option removes this file

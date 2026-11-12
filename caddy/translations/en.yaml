@@ -1,0 +1,2 @@
+network:
+  8443/tcp: "HTTPS external port (default 443); keep Caddy listening on 8443 inside the container."

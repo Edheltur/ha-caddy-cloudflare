@@ -1,5 +1,5 @@
 name: Caddy Cloudflare mTLS
-version: 0.1.0
+version: 0.1.1
 slug: caddy
 description: Caddy reverse proxy with Cloudflare DNS-01 and per-host mTLS
 arch:
@@ -135,9 +135,6 @@ options:
       }
     }
   client_ca_pem: ""
-schema:
-  cloudflare_api_token: password
-  caddy_config: str(1,131072)
-  client_ca_pem: str?
+schema: false
 url: https://github.com/Edheltur/ha-caddy-cloudflare/tree/main/caddy
 image: ghcr.io/edheltur/ha-caddy-cloudflare/caddy
